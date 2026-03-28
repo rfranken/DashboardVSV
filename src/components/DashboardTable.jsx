@@ -27,14 +27,14 @@ export default function DashboardTable({ data, currentDomain, domains }) {
       <table className="min-w-full divide-y divide-gray-300">
         <thead className="bg-gray-50">
           <tr>
-            <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6 bg-gray-100 border-r border-gray-200 sticky left-0 w-48 z-10">
+            <th scope="col" className="py-2.5 pl-4 pr-2 text-left text-sm font-semibold text-gray-900 sm:pl-6 bg-gray-100 border-r border-gray-200 sticky left-0 w-40 z-10">
               Status
             </th>
             {domains.map((domain) => {
               const debugInfo = data[domain]?._debug;
               
               return (
-                <th key={domain} scope="col" className="px-3 py-3.5 text-center text-sm font-semibold text-gray-900 min-w-[5rem]">
+                <th key={domain} scope="col" className="px-1.5 py-2.5 text-center text-sm font-semibold text-gray-900 min-w-[3.5rem]">
                   <div className="flex flex-col items-center justify-center space-y-1">
                     {/* Database icon is shown when this domain is currently loading */}
                     <div className={`h-5 w-5 ${currentDomain === domain ? 'visible opacity-100 animate-pulse text-blue-600' : 'invisible opacity-0'}`}>
@@ -53,7 +53,7 @@ export default function DashboardTable({ data, currentDomain, domains }) {
         <tbody className="divide-y divide-gray-200 bg-white">
           {STATUS_ROWS.map((row) => (
             <tr key={row.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 w-48 overflow-hidden text-ellipsis">
+              <td className="whitespace-nowrap py-3 pl-4 pr-2 text-sm font-medium text-gray-900 sm:pl-6 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 w-40 overflow-hidden text-ellipsis">
                 {row.label}
               </td>
               {domains.map((domain) => {
@@ -65,7 +65,7 @@ export default function DashboardTable({ data, currentDomain, domains }) {
                 const value = domainData[cellKey];
 
                 return (
-                  <td key={cellKey} className="whitespace-nowrap px-3 py-4 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0">
+                  <td key={cellKey} className="whitespace-nowrap px-1.5 py-3 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0">
                     <span className={getCellColorClass(value, row.prefix)}>
                       {value !== undefined ? value : '-'}
                     </span>

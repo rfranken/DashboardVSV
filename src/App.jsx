@@ -51,7 +51,7 @@ function App() {
         dsn={dbConfig.dsn}
       />
 
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-screen-2xl mx-auto space-y-6">
         
         {/* Header Layout per Requirements */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-xl shadow-sm border border-gray-200">
