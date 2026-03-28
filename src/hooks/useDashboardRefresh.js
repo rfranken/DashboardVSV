@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 // Domain config constraints
 const DOMAINS = [
-  'DOM5', 'DOM6', 'DOM7', 'DOM8', 'DOM9', 'DOM10',
+  'DOM3', 'DOM4', 'DOM5', 'DOM6', 'DOM7', 'DOM8', 'DOM9', 'DOM10',
   'DOM11', 'DOM12', 'DOM13', 'DOM14', 'DOM15', 'DOM16'
 ];
 
