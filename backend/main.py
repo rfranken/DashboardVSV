@@ -1,7 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts
+from database import init_pool, get_status_counts, is_connected
 import os
+from pydantic import BaseModel
+
+class ConnectionRequest(BaseModel):
+    password: str
 
 app = FastAPI(title="DashboardVSV Backend API")
 
@@ -16,9 +20,29 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event():
-    # Attempt to initialize the pool on server start
-    # Ensure you have your .env file configured properly
+    # Attempt to initialize the pool on server start if DB_PASSWORD is in .env
     init_pool()
+
+@app.get("/api/connection-status")
+def connection_status():
+    """
+    Checks if the database pool is initialized and returns connection metadata.
+    """
+    return {
+        "connected": is_connected(),
+        "user": os.environ.get("DB_USER"),
+        "dsn": os.environ.get("DB_DSN", os.environ.get("DB_TNSENTRY_NAME"))
+    }
+
+@app.post("/api/connect")
+def connect_database(request: ConnectionRequest):
+    """
+    Manual override to initialize the database pool with a provided password.
+    """
+    success = init_pool(password=request.password)
+    if not success:
+        raise HTTPException(status_code=401, detail="Authentication failed or database refused connection.")
+    return {"status": "success", "message": "Database connected successfully"}
 
 @app.get("/api/status")
 def read_status(domain: str):
@@ -52,7 +76,7 @@ def read_status(domain: str):
                 transformed_data[key] = count
                 
         # Send back payload + optional debugging 
-        payload = { **transformed_data }
+        payload = { **transformed_data, "start_date": os.environ.get("START_DATE", "17012025") }
         
         if os.environ.get("DEBUG_MODE", "OFF") == "ON":
             payload["_debug"] = {

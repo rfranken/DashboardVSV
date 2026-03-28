@@ -1,14 +1,56 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import DashboardTable from './components/DashboardTable';
+import ConnectModal from './components/ConnectModal';
 import { useDashboardRefresh } from './hooks/useDashboardRefresh';
 import './index.css';
 
 function App() {
-  const { data, DOMAINS, isRefreshing, currentDomain, lastRefreshTime, refresh } = useDashboardRefresh();
+  const { 
+    data, 
+    DOMAINS, 
+    isRefreshing, 
+    currentDomain, 
+    lastRefreshTime, 
+    startDate, 
+    isConnected,
+    dbConfig,
+    refresh,
+    checkConnection,
+    setIsConnected
+  } = useDashboardRefresh();
+
+  // Auto-check connection on mount
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
+
+  // Helper to reformat DDMMYYYY to DD-MM-YYYY for Western Europe
+  const formatEuropeDate = (dateStr) => {
+    if (!dateStr || dateStr === '-' || dateStr.length < 8) return dateStr;
+    const pureDate = dateStr.split(':')[0];
+    if (pureDate.length !== 8) return dateStr;
+    return `${pureDate.substring(0, 2)}-${pureDate.substring(2, 4)}-${pureDate.substring(4, 8)}`;
+  };
+
+  const displayStartDate = formatEuropeDate(startDate);
+
+  // Auto-refresh when finally connected
+  const handleConnect = () => {
+    setIsConnected(true);
+    refresh();
+  };
 
   return (
     <div className="min-h-screen relative font-sans text-gray-900 bg-gray-50 p-4 md:p-8">
+      {/* Secure Connection Pop-up */}
+      <ConnectModal 
+        isOpen={!isConnected} 
+        onConnect={handleConnect}
+        dbUser={dbConfig.user}
+        dsn={dbConfig.dsn}
+      />
+
       <div className="max-w-7xl mx-auto space-y-6">
         
         {/* Header Layout per Requirements */}
@@ -21,19 +63,24 @@ function App() {
           <div className="mt-4 sm:mt-0 flex flex-col items-end space-y-2">
             <button
               onClick={refresh}
-              disabled={isRefreshing}
+              disabled={isRefreshing || !isConnected}
               className={`inline-flex items-center px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
                 isRefreshing 
                   ? 'bg-blue-400 text-white cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  : (isConnected ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-400 text-white cursor-not-allowed')
               }`}
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Last refresh: {lastRefreshTime}
-            </span>
+            <div className="flex items-center space-x-3 text-xs font-medium text-gray-500">
+              <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 italic">
+                Messages are older than: <span className="font-bold">{displayStartDate}</span>
+              </span>
+              <span className="bg-gray-100 px-2 py-1 rounded">
+                Last refresh: {lastRefreshTime}
+              </span>
+            </div>
           </div>
         </div>
 

@@ -9,8 +9,15 @@ load_dotenv()
 # Global connection pool
 _pool = None
 
-def init_pool():
+def is_connected():
+    return _pool is not None
+
+def init_pool(password: str = None):
     global _pool
+    # If pool already exists, skip
+    if _pool:
+        return True
+        
     try:
         # Enable thick mode to support local bequeath connections
         tns_admin = os.environ.get("TNS_ADMIN")
@@ -19,18 +26,27 @@ def init_pool():
         else:
             oracledb.init_oracle_client()
         
+        # Use provided password or fallback to environment (for convenience/legacy)
+        db_password = password or os.environ.get("DB_PASSWORD")
+        
+        if not db_password:
+            print("No password provided. Pool initialization deferred.")
+            return False
+            
         # Create the Oracle Connection Pool
         _pool = oracledb.create_pool(
             user=os.environ.get("DB_USER"),
-            password=os.environ.get("DB_PASSWORD"),
+            password=db_password,
             dsn=os.environ.get("DB_DSN", os.environ.get("DB_TNSENTRY_NAME")),
             min=2,
             max=5,
             increment=1
         )
         print("Successfully created Oracle Connection Pool")
+        return True
     except Exception as e:
         print(f"Failed to create Oracle pool: {e}")
+        return False
 
 def get_status_counts(domain: str):
     """
@@ -44,6 +60,9 @@ def get_status_counts(domain: str):
         raise ValueError("Invalid domain identifier format.")
         
     schema_name = f"{domain}ADMIN"
+    raw_start_date = os.environ.get("START_DATE", "17012025")
+    # Robustness: Extract only the DDMMYYYY part (first 8 chars) before using in SQL
+    start_date = raw_start_date.split(':')[0][:8]
     
     sql = f"""
     SELECT  DECODE(TELLINGEN.STATUS    
@@ -66,7 +85,7 @@ def get_status_counts(domain: str):
                 ON IOT.LID = IOM.LTYPEID 
         WHERE (1=1)
         AND IOS.SSUBTYPENAME = 'SmartReadingsNotification'
-        AND IOM.TTIME  > CAST(FROM_TZ(CAST(  TO_DATE('17012025', 'DDMMYYYY')  AS TIMESTAMP), 'CET') AT TIME ZONE 'UTC' AS DATE)
+        AND IOM.TTIME  > CAST(FROM_TZ(CAST(  TO_DATE('{start_date}', 'DDMMYYYY')  AS TIMESTAMP), 'CET') AT TIME ZONE 'UTC' AS DATE)
         GROUP BY IOM.LSTATUS
     ) TELLINGEN
     ORDER BY 1

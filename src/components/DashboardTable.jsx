@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, Info } from 'lucide-react';
+import { Database } from 'lucide-react';
 
 const STATUS_ROWS = [
   { label: 'Afgewezen', prefix: 'A', id: 'A' },
@@ -43,17 +43,6 @@ export default function DashboardTable({ data, currentDomain, domains }) {
                     
                     <div className="flex items-center space-x-1">
                       <span>{domain}</span>
-                      
-                      {/* Debug Tooltip Rendering */}
-                      {debugInfo && (
-                        <div className="group relative flex items-center justify-center">
-                          <Info size={14} className="text-gray-400 hover:text-blue-500 cursor-pointer" />
-                          <div className="absolute top-6 z-50 hidden group-hover:flex flex-col items-start w-72 bg-gray-800 text-white text-xs rounded shadow-lg p-2 leading-relaxed text-left opacity-0 group-hover:opacity-100 transition-opacity whitespace-pre-wrap">
-                            <span className="font-bold text-gray-300 mb-1 border-b border-gray-600 w-full">{debugInfo.context}</span>
-                            <code className="mt-1">{debugInfo.sql.trim()}</code>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </th>

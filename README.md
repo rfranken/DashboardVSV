@@ -7,7 +7,26 @@ Currently, two official plugins are available:
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
 - [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
+## Getting Started
+
+To start both the backend (FastAPI) and frontend (Vite/React) together:
+
+### Option 1: PowerShell Script
+Run the provided script from the root:
+```powershell
+.\Start-App.ps1
+```
+
+### Option 2: NPM Script
+Run via npm:
+```bash
+npm run start:all
+```
+
+---
+
 ## React Compiler
+...
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 

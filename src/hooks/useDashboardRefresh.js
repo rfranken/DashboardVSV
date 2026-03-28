@@ -11,9 +11,34 @@ export function useDashboardRefresh() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentDomain, setCurrentDomain] = useState(null);
   const [lastRefreshTime, setLastRefreshTime] = useState('-');
+  const [startDate, setStartDate] = useState('-');
+  const [isConnected, setIsConnected] = useState(false); 
+  const [dbConfig, setDbConfig] = useState({ user: '-', dsn: '-' });
+
+  const checkConnection = useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/connection-status');
+      if (response.ok) {
+        const status = await response.json();
+        setIsConnected(status.connected);
+        setDbConfig({ user: status.user, dsn: status.dsn });
+        return status.connected;
+      }
+    } catch (error) {
+      console.error('Failed to check connection status:', error);
+    }
+    return false;
+  }, []);
 
   const refresh = useCallback(async () => {
     if (isRefreshing) return;
+
+    // Verify connection before starting sequence
+    const connected = await checkConnection();
+    if (!connected) {
+      setIsConnected(false);
+      return;
+    }
 
     setIsRefreshing(true);
     
@@ -24,17 +49,28 @@ export function useDashboardRefresh() {
       try {
         const response = await fetch(`http://localhost:8000/api/status?domain=${domain}`);
         
+        if (response.status === 401) {
+          setIsConnected(false);
+          break;
+        }
+
         if (!response.ok) {
            console.error(`Backend returned HTTP ${response.status} for ${domain}`);
-           continue; // skip overriding old data if query fails
+           continue; 
         }
         
         const newDataForDomain = await response.json();
         
+        // Update data
         setData(prev => ({
           ...prev,
           [domain]: newDataForDomain
         }));
+
+        // Capture startDate if available
+        if (newDataForDomain.start_date) {
+          setStartDate(newDataForDomain.start_date);
+        }
       } catch (error) {
         console.error(`Failed to fetch data for ${domain}:`, error);
       }
@@ -46,7 +82,7 @@ export function useDashboardRefresh() {
     const now = new Date();
     setLastRefreshTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
 
-  }, [isRefreshing]);
+  }, [isRefreshing, checkConnection]);
 
   return {
     data,
@@ -54,6 +90,11 @@ export function useDashboardRefresh() {
     isRefreshing,
     currentDomain,
     lastRefreshTime,
-    refresh
+    startDate,
+    isConnected,
+    dbConfig,
+    setIsConnected,
+    refresh,
+    checkConnection
   };
 }
