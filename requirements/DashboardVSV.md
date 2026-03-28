@@ -95,4 +95,19 @@ So if the above result was found for DOM5, the cell 'A5' should display '10', 'G
 - The refresh button should be enabled after all domains in the dashboard have been refreshed.
 - Below the refresh button, the last refresh time should be displayed. This should be in the format 'Last refresh: HH:MM:SS'. This should be updated every time the dashboard is refreshed. Initially this field is empty (i.e. show a dash '-').
 
+## Oracle Backend
+*   **Database Adapter:** Use **python-oracledb** (v2+). 
+*   **Secure bind variables:**  Always use *secure bind variables* (like `:variabele`) in Queries to prevent SQL injection. 
+*   **Configuratie management:** Use **python-dotenv** for loading `.env` configuration variables. Do not store credentials in the source code.
 
+## Debug mode
+The debug mode is a feature that is initiated by a variable in the .env file of the backend:
+DEBUG_MODE: ON or OFF, default OFF
+
+When the debug mode is ON, or active, the following happens:
+- ALL SQL queries are written to the backend.log file with the following format:
+    - Context: A description of why the SQL was executed, e.g. the name of the field that was populated in case of a dynamic dropdown list
+    - SQL: The SQL, exactly in the way it was handed over to the database, so with bind parameters included
+    - Result: Either 'OK' or 'ERROR'. 
+    - Error description: In case the Result was 'ERROR': the error that was returned by the database system.
+- If there are fields that are dynamic dropdown fields, so which are filled by an SQL have a 'i' icon behind their labels. This icon contains a tooltip in which the SQL is shown.

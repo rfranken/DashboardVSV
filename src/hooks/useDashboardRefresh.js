@@ -12,41 +12,32 @@ export function useDashboardRefresh() {
   const [currentDomain, setCurrentDomain] = useState(null);
   const [lastRefreshTime, setLastRefreshTime] = useState('-');
 
-  // Generate randomized dummy table response for a single domain
-  const generateDummyResponse = (domain) => {
-    // Array order: A, G, PG, VW (VM), WV, ON
-    const id = domain.replace('DOM', '');
-    const dataRow = {
-      // Create random counts, occasionally zero to test black color requirement
-      [`A${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 50) + 1,
-      [`G${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 200) + 1,
-      [`PG${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 50) + 1,
-      [`VM${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 20) + 1,
-      [`WV${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 80) + 1,
-      [`ON${id}`]: Math.random() > 0.8 ? 0 : Math.floor(Math.random() * 5) + 1,
-    };
-    return dataRow;
-  };
-
   const refresh = useCallback(async () => {
     if (isRefreshing) return;
 
     setIsRefreshing(true);
-    let newDataTemp = {}; // Clear previous data table while fetching? Or keep old? Let's keep old data but update specifically.
     
     // Starting sequential loop
     for (const domain of DOMAINS) {
       setCurrentDomain(domain);
       
-      // Simulate network wait
-      await new Promise(res => setTimeout(res, 800));
-
-      const newDataForDomain = generateDummyResponse(domain);
-      
-      setData(prev => ({
-        ...prev,
-        [domain]: newDataForDomain
-      }));
+      try {
+        const response = await fetch(`http://localhost:8000/api/status?domain=${domain}`);
+        
+        if (!response.ok) {
+           console.error(`Backend returned HTTP ${response.status} for ${domain}`);
+           continue; // skip overriding old data if query fails
+        }
+        
+        const newDataForDomain = await response.json();
+        
+        setData(prev => ({
+          ...prev,
+          [domain]: newDataForDomain
+        }));
+      } catch (error) {
+        console.error(`Failed to fetch data for ${domain}:`, error);
+      }
     }
 
     setCurrentDomain(null);
