@@ -19,10 +19,25 @@ def log_sql(context: str, sql: str, params: dict, result: str, error_desc: str =
     # Basic formatting to file
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(f"--- [ {datetime.now().isoformat()} ] ---\n")
+        f.write(f"Type: SQL_EXECUTION\n")
         f.write(f"Context: {context}\n")
         f.write(f"SQL: {sql.strip()}\n")
         f.write(f"Binds: {params}\n")
         f.write(f"Result: {result}\n")
         if error_desc:
             f.write(f"Error description: {error_desc}\n")
+        f.write("\n")
+
+def log_message(message: str, category: str = "INFO"):
+    """
+    Writes a general diagnostic message to backend.log if DEBUG_MODE is ON.
+    """
+    if os.environ.get("DEBUG_MODE", "OFF") != "ON":
+        return
+
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(f"--- [ {datetime.now().isoformat()} ] ---\n")
+        f.write(f"Type: DIAGNOSTIC\n")
+        f.write(f"Category: {category}\n")
+        f.write(f"Message: {message}\n")
         f.write("\n")

@@ -17,6 +17,7 @@ function App() {
     dbConfig,
     refresh,
     checkConnection,
+    disconnect,
     setIsConnected
   } = useDashboardRefresh();
 
@@ -44,11 +45,9 @@ function App() {
   return (
     <div className="min-h-screen relative font-sans text-gray-900 bg-gray-50 p-4 md:p-8">
       {/* Secure Connection Pop-up */}
-      <ConnectModal 
-        isOpen={!isConnected} 
+      <ConnectModal
+        isOpen={!isConnected}
         onConnect={handleConnect}
-        dbUser={dbConfig.user}
-        dsn={dbConfig.dsn}
       />
 
       <div className="max-w-screen-2xl mx-auto space-y-6">
@@ -74,6 +73,21 @@ function App() {
               Refresh
             </button>
             <div className="flex items-center space-x-3 text-xs font-medium text-gray-500">
+              <span className="bg-gray-100 px-2 py-1 rounded">
+                Connected as: <span className="font-bold uppercase">{dbConfig.user}</span>
+              </span>
+              <span className="bg-gray-100 px-2 py-1 rounded">
+                Database: <span className="font-bold uppercase">{dbConfig.dsn}</span>
+              </span>
+              {isConnected && (
+                <button
+                  onClick={disconnect}
+                  className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-1 rounded text-xs font-semibold transition-colors"
+                  title="Disconnect from Oracle database"
+                >
+                  Log Out
+                </button>
+              )}
               <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 italic">
                 Messages are older than: <span className="font-bold">{displayStartDate}</span>
               </span>

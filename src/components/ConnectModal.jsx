@@ -1,12 +1,27 @@
 import React, { useState } from 'react';
-import { Database, Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { Database, Lock, AlertCircle, Loader2, ChevronDown } from 'lucide-react';
 
-const ConnectModal = ({ isOpen, onConnect, dbUser, dsn }) => {
+// Environment → Database User mapping
+const ENV_CONFIG = {
+  DSFATN2: { label: 'DSFATN2 (Default)', dbUser: 'FATN2_GEN_FRANKEN' },
+  DSACT2:  { label: 'DSACT2',            dbUser: 'ACT2_GEN_FRANKENR'  },
+  DSPRD:   { label: 'DSPRD',             dbUser: 'PRD_FRANKENR'        },
+};
+
+const ConnectModal = ({ isOpen, onConnect }) => {
+  const [selectedEnv, setSelectedEnv] = useState('DSFATN2');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   if (!isOpen) return null;
+
+  const dbUser = ENV_CONFIG[selectedEnv].dbUser;
+
+  const handleEnvChange = (e) => {
+    setSelectedEnv(e.target.value);
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -16,10 +31,8 @@ const ConnectModal = ({ isOpen, onConnect, dbUser, dsn }) => {
     try {
       const response = await fetch('http://localhost:8000/api/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ password }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, dsn: selectedEnv, db_user: dbUser }),
       });
 
       if (!response.ok) {
@@ -38,7 +51,7 @@ const ConnectModal = ({ isOpen, onConnect, dbUser, dsn }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md overflow-hidden transform animate-in zoom-in-95 duration-200">
-        
+
         {/* Header */}
         <div className="bg-blue-600 p-6 text-white">
           <div className="flex items-center space-x-3">
@@ -55,15 +68,42 @@ const ConnectModal = ({ isOpen, onConnect, dbUser, dsn }) => {
         {/* Content */}
         <div className="p-8">
           <div className="space-y-4 mb-8">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Database User</p>
-                <p className="text-sm font-bold text-gray-800 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-100 inline-block">{dbUser}</p>
+            {/* Environment (left) + Database User (right) */}
+            <div className="flex gap-4 items-start">
+
+              {/* Environment Dropdown — LEFT */}
+              <div className="flex-1">
+                <label
+                  htmlFor="env-select"
+                  className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1"
+                >
+                  Environment
+                </label>
+                <div className="relative">
+                  <select
+                    id="env-select"
+                    value={selectedEnv}
+                    onChange={handleEnvChange}
+                    className="w-full appearance-none text-sm font-bold text-gray-800 bg-gray-50 border border-gray-200 rounded-md px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all cursor-pointer"
+                  >
+                    {Object.entries(ENV_CONFIG).map(([key, cfg]) => (
+                      <option key={key} value={key}>{cfg.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Environment</p>
-                <p className="text-sm font-bold text-gray-800 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-100 inline-block">{dsn}</p>
+
+              {/* Database User — RIGHT (auto-filled, read-only) */}
+              <div className="flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                  Database User
+                </p>
+                <p className="text-sm font-bold text-gray-800 bg-gray-50 px-3 py-1.5 rounded-md border border-gray-100 inline-block w-full truncate">
+                  {dbUser}
+                </p>
               </div>
+
             </div>
           </div>
 
@@ -110,7 +150,7 @@ const ConnectModal = ({ isOpen, onConnect, dbUser, dsn }) => {
               )}
             </button>
           </form>
-          
+
           <p className="text-center text-[10px] text-gray-400 mt-6 px-4 leading-relaxed font-medium">
             Note: Passwords are not stored in the application environment and must be re-entered if the backend restarts.
           </p>

@@ -30,6 +30,18 @@ export function useDashboardRefresh() {
     return false;
   }, []);
 
+  const disconnect = useCallback(async () => {
+    try {
+      await fetch('http://localhost:8000/api/disconnect', { method: 'POST' });
+    } catch (error) {
+      console.error('Failed to disconnect:', error);
+    }
+    setIsConnected(false);
+    setData({});
+    setLastRefreshTime('-');
+    setDbConfig({ user: '-', dsn: '-' });
+  }, []);
+
   const refresh = useCallback(async () => {
     if (isRefreshing) return;
 
@@ -95,6 +107,7 @@ export function useDashboardRefresh() {
     dbConfig,
     setIsConnected,
     refresh,
-    checkConnection
+    checkConnection,
+    disconnect,
   };
 }

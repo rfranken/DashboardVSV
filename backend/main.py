@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, is_connected
+from database import init_pool, get_status_counts, is_connected, close_pool
 import os
 from pydantic import BaseModel
 
 class ConnectionRequest(BaseModel):
     password: str
+    dsn: str | None = None
+    db_user: str | None = None
 
 app = FastAPI(title="DashboardVSV Backend API")
 
@@ -37,12 +39,25 @@ def connection_status():
 @app.post("/api/connect")
 def connect_database(request: ConnectionRequest):
     """
-    Manual override to initialize the database pool with a provided password.
+    Manual override to initialize the database pool with the provided credentials.
+    Optionally accepts dsn and db_user so the user can choose the environment in the UI.
     """
-    success = init_pool(password=request.password)
+    success = init_pool(
+        password=request.password,
+        dsn=request.dsn,
+        db_user=request.db_user,
+    )
     if not success:
         raise HTTPException(status_code=401, detail="Authentication failed or database refused connection.")
     return {"status": "success", "message": "Database connected successfully"}
+
+@app.post("/api/disconnect")
+def disconnect_database():
+    """
+    Closes the Oracle connection pool so the frontend login modal is triggered again.
+    """
+    close_pool()
+    return {"status": "ok", "message": "Disconnected successfully"}
 
 @app.get("/api/status")
 def read_status(domain: str):

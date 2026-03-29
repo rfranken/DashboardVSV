@@ -7,7 +7,7 @@ Write-Host "---------------------------------------------------" -ForegroundColo
 
 # 1. Start Backend
 Write-Host "[1/2] Launching Backend (FastAPI) in a new window..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; Write-Host 'Starting Backend...'; uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; Write-Host 'Starting Backend...'; uvicorn main:app --reload --reload-include .env --host 0.0.0.0 --port 8000"
 
 # 2. Start Frontend
 Write-Host "[2/2] Launching Frontend (Vite/React) in a new window..." -ForegroundColor Green
