@@ -29,7 +29,8 @@ const ConnectModal = ({ isOpen, onConnect }) => {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:8000/api/connect', {
+      const apiBase = `http://${window.location.hostname}:8000`;
+      const response = await fetch(`${apiBase}/api/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password, dsn: selectedEnv, db_user: dbUser }),

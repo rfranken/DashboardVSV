@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, is_connected, close_pool
+from database import init_pool, get_status_counts, is_connected, close_pool, get_active_credentials
 import os
+import traceback
 from pydantic import BaseModel
 
 class ConnectionRequest(BaseModel):
@@ -11,10 +12,13 @@ class ConnectionRequest(BaseModel):
 
 app = FastAPI(title="DashboardVSV Backend API")
 
-# Configure CORS to allow our Vite React frontend to request data
+# Configure CORS based on LOCAL_MODE
+local_mode = os.environ.get("LOCAL_MODE", "ON") == "ON"
+origins = ["http://localhost:5173", "http://127.0.0.1:5173"] if local_mode else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,12 +32,15 @@ def startup_event():
 @app.get("/api/connection-status")
 def connection_status():
     """
-    Checks if the database pool is initialized and returns connection metadata.
+    Checks if the database pool is initialized and returns the active connection metadata.
+    Returns the actual runtime user/DSN used at pool creation, not the static .env values.
     """
+    active_user, active_dsn = get_active_credentials()
     return {
         "connected": is_connected(),
-        "user": os.environ.get("DB_USER"),
-        "dsn": os.environ.get("DB_DSN", os.environ.get("DB_TNSENTRY_NAME"))
+        "user": active_user,
+        "dsn":  active_dsn,
+        "default_start_date": os.environ.get("DEFAULT_START_DATE", ""),
     }
 
 @app.post("/api/connect")
@@ -59,21 +66,37 @@ def disconnect_database():
     close_pool()
     return {"status": "ok", "message": "Disconnected successfully"}
 
+ALLOWED_SUBTYPES = {
+    'SmartReadingsNotification',
+    'VolumeSeriesNotification',
+    'MeterReadingExchange',
+}
+
 @app.get("/api/status")
-def read_status(domain: str):
+def read_status(
+    domain: str,
+    subtype: str = 'SmartReadingsNotification',
+    start_date: str = '',
+):
     """
-    Returns the message processing status counts for a specified domain.
-    Expected domain format: DOMx (e.g., DOM5, DOM16)
+    Returns the message processing status counts for a specified domain and message subtype.
+    start_date: DDMMYYYY string from the UI date picker; falls back to DEFAULT_START_DATE env var.
     """
+    from logger import log_message
     try:
-        results, debug_sql = get_status_counts(domain)
-        
-        # Transform the result list of dicts into the flat dictionary format expected by the frontend
+        if subtype not in ALLOWED_SUBTYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid subtype. Allowed: {', '.join(sorted(ALLOWED_SUBTYPES))}")
+
+        # UI-supplied date wins; fall back to env default
+        resolved_start_date = start_date or os.environ.get("DEFAULT_START_DATE", "17012025")
+
+        results, debug_sql = get_status_counts(domain, subtype, resolved_start_date)
         
         domain_suffix = domain.replace('DOM', '')
         transformed_data = {
            f"A{domain_suffix}": 0,
            f"G{domain_suffix}": 0,
+           f"V{domain_suffix}": 0,
            f"PG{domain_suffix}": 0,
            f"VM{domain_suffix}": 0,
            f"WV{domain_suffix}": 0,
@@ -83,25 +106,26 @@ def read_status(domain: str):
         for row in results:
             status = row['IOMSTATUS']
             count = row['AANTAL']
-            
             if status == 'VW': 
                 transformed_data[f"VM{domain_suffix}"] = count
             else:
                 key = f"{status}{domain_suffix}"
                 transformed_data[key] = count
                 
-        # Send back payload + optional debugging 
-        payload = { **transformed_data, "start_date": os.environ.get("START_DATE", "17012025") }
+        payload = { **transformed_data }
         
         if os.environ.get("DEBUG_MODE", "OFF") == "ON":
             payload["_debug"] = {
                 "sql": debug_sql,
-                "context": f"Fetching message status counts for {domain}"
+                "context": f"Fetching message status counts for {domain}",
+                "start_date_used": resolved_start_date,
             }
             
         return payload
         
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+    except HTTPException:
+        raise  # re-raise 400/401 etc. without logging
     except Exception as e:
+        tb = traceback.format_exc()
+        log_message(f"UNHANDLED EXCEPTION in /api/status (domain={domain}):\n{tb}", category="ERROR")
         raise HTTPException(status_code=500, detail=str(e))

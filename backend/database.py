@@ -8,12 +8,17 @@ load_dotenv(override=True)
 
 # Global connection pool
 _pool = None
+_active_user = None
+_active_dsn  = None
 
 def is_connected():
     return _pool is not None
 
+def get_active_credentials():
+    return _active_user, _active_dsn
+
 def close_pool():
-    global _pool
+    global _pool, _active_user, _active_dsn
     if _pool:
         try:
             _pool.close(force=True)
@@ -22,9 +27,11 @@ def close_pool():
             log_message(f"Error closing pool: {e}", category="ERROR")
         finally:
             _pool = None
+            _active_user = None
+            _active_dsn  = None
 
 def init_pool(password: str = None, dsn: str = None, db_user: str = None):
-    global _pool
+    global _pool, _active_user, _active_dsn
     # If pool already exists, skip
     if _pool:
         return True
@@ -63,6 +70,9 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
             max=5,
             increment=1
         )
+        # Persist so /api/connection-status can report the actual runtime values
+        _active_user = resolved_user
+        _active_dsn  = resolved_dsn
         log_message("Successfully created Oracle Connection Pool", category="POOL")
         print("Successfully created Oracle Connection Pool")
         return True
@@ -71,10 +81,10 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
         print(f"Failed to create Oracle pool: {e}")
         return False
 
-def get_status_counts(domain: str):
+def get_status_counts(domain: str, subtype: str = 'SmartReadingsNotification', start_date: str = '17012025'):
     """
-    Executes the query to fetch message status counts for a specific domain.
-    Utilizes SECURE bind variables (:domain) instead of string concatenation to prevent SQL injection.
+    Executes the query to fetch message status counts for a specific domain, subtype and start date.
+    Utilizes SECURE bind variables (:subtype) instead of string concatenation to prevent SQL injection.
     """
     if not _pool:
         raise Exception("Database pool is not initialized")
@@ -83,16 +93,16 @@ def get_status_counts(domain: str):
         raise ValueError("Invalid domain identifier format.")
         
     schema_name = f"{domain}ADMIN"
-    raw_start_date = os.environ.get("START_DATE", "17012025")
     # Robustness: Extract only the DDMMYYYY part (first 8 chars) before using in SQL
-    start_date = raw_start_date.split(':')[0][:8]
+    safe_start_date = start_date.split(':')[0][:8]
     
     sql = f"""
     SELECT  DECODE(TELLINGEN.STATUS    
                   ,-6,   'A'   --'Afgewezen' 
                   ,-1,   'VW'  --'Verwerking mislukt'
                   , 0,   'WV'  --'Wordt Verwerkt'           
-                  , 2 ,  'G'   --'Geaccepteerd'             
+                  , 2 ,  'G'   --'Geaccepteerd'    
+                  , 1,   'V'   --'Verwerkt'         
                   , 7 ,  'PG'  --'Gedeeltelijk geaccepteerd' 
                   ,      'ON'  --'Onbekend: '||TELLINGEN.STATUS 
                   )               IOMSTATUS
@@ -107,15 +117,15 @@ def get_status_counts(domain: str):
         JOIN {schema_name}.G_IO_ARCHIVE_TYPE IOT
                 ON IOT.LID = IOM.LTYPEID 
         WHERE (1=1)
-        AND IOS.SSUBTYPENAME = 'SmartReadingsNotification'
-        AND IOM.TTIME  > CAST(FROM_TZ(CAST(  TO_DATE('{start_date}', 'DDMMYYYY')  AS TIMESTAMP), 'CET') AT TIME ZONE 'UTC' AS DATE)
+        AND IOS.SSUBTYPENAME = :subtype
+        AND IOM.TTIME  > TO_DATE('{safe_start_date}', 'DDMMYYYY')
         GROUP BY IOM.LSTATUS
     ) TELLINGEN
     ORDER BY 1
     """
 
     context_str = f"Fetching message status counts for {domain}"
-    bind_params = {} # No strict dict binds needed here because we used f-strings for the schema validation instead, but passing explicit empty binds.
+    bind_params = {'subtype': subtype}
     
     try:
         with _pool.acquire() as connection:

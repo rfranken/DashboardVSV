@@ -4,6 +4,7 @@ import { Database } from 'lucide-react';
 const STATUS_ROWS = [
   { label: 'Afgewezen', prefix: 'A', id: 'A' },
   { label: 'Geaccepteerd', prefix: 'G', id: 'G' },
+  { label: 'Verwerkt', prefix: 'V', id: 'V' },
   { label: 'Partieel Geaccepteerd', prefix: 'PG', id: 'PG' },
   { label: 'Verwerking mislukt', prefix: 'VM', id: 'VM' },
   { label: 'Wordt Verwerkt', prefix: 'WV', id: 'WV' },
@@ -16,7 +17,7 @@ export default function DashboardTable({ data, currentDomain, domains }) {
     if (value === undefined || value === null) return 'text-black font-semibold opacity-30'; // placeholder state
     if (value === 0) return 'text-black font-semibold';
     if (value > 0) {
-      if (prefix === 'G') return 'text-green-600 font-bold';
+      if (prefix === 'G' || prefix === 'V') return 'text-green-600 font-bold';
       return 'text-red-600 font-bold';
     }
     return 'text-black font-semibold';

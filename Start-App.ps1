@@ -11,7 +11,7 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd backend; Write
 
 # 2. Start Frontend
 Write-Host "[2/2] Launching Frontend (Vite/React) in a new window..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'Starting Frontend...'; npm run dev"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "Write-Host 'Starting Frontend...'; npm run dev -- --host"
 
 Write-Host "`nAll systems go! Check the newly opened windows for logs." -ForegroundColor Cyan
 Write-Host "Backend: http://localhost:8000" -ForegroundColor Gray

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import DashboardTable from './components/DashboardTable';
 import ConnectModal from './components/ConnectModal';
@@ -12,7 +12,6 @@ function App() {
     isRefreshing, 
     currentDomain, 
     lastRefreshTime, 
-    startDate, 
     isConnected,
     dbConfig,
     refresh,
@@ -21,25 +20,47 @@ function App() {
     setIsConnected
   } = useDashboardRefresh();
 
-  // Auto-check connection on mount
-  useEffect(() => {
-    checkConnection();
-  }, [checkConnection]);
+  // Seed date picker on mount by checking connection (also populates dbConfig)
+  // The separate useEffect below handles this via checkConnection().then(...)
 
-  // Helper to reformat DDMMYYYY to DD-MM-YYYY for Western Europe
-  const formatEuropeDate = (dateStr) => {
-    if (!dateStr || dateStr === '-' || dateStr.length < 8) return dateStr;
-    const pureDate = dateStr.split(':')[0];
-    if (pureDate.length !== 8) return dateStr;
-    return `${pureDate.substring(0, 2)}-${pureDate.substring(2, 4)}-${pureDate.substring(4, 8)}`;
+
+  // ---- Date picker state ----
+  // Converts DDMMYYYY (backend) → YYYY-MM-DD (HTML input value)
+  const ddmmyyyyToInputVal = (ddmmyyyy) => {
+    const s = (ddmmyyyy || '').replace(/\D/g, '');
+    if (s.length < 8) return '';
+    return `${s.substring(4, 8)}-${s.substring(2, 4)}-${s.substring(0, 2)}`;
+  };
+  // Converts YYYY-MM-DD (HTML input value) → DDMMYYYY (backend)
+  const inputValToDdmmyyyy = (val) => {
+    if (!val) return '';
+    const [y, m, d] = val.split('-');
+    return `${d}${m}${y}`;
   };
 
-  const displayStartDate = formatEuropeDate(startDate);
+  const todayInputVal = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const [selectedDate, setSelectedDate] = useState('');
+
+  // Seed the date picker once the backend reports its default
+  useEffect(() => {
+    checkConnection().then((status) => {
+      if (status?.default_start_date) {
+        setSelectedDate(ddmmyyyyToInputVal(status.default_start_date));
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const MESSAGE_SUBTYPES = [
+    'SmartReadingsNotification',
+    'VolumeSeriesNotification',
+    'MeterReadingExchange',
+  ];
+  const [messageSubtype, setMessageSubtype] = useState('SmartReadingsNotification');
 
   // Auto-refresh when finally connected
   const handleConnect = () => {
     setIsConnected(true);
-    refresh();
+    refresh(messageSubtype, inputValToDdmmyyyy(selectedDate));
   };
 
   return (
@@ -56,12 +77,29 @@ function App() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">DashboardVSV</h1>
-            <p className="text-sm text-gray-500 mt-1">Real-time status message monitoring</p>
+            <div className="flex items-center gap-3 mt-1">
+              <p className="text-sm text-gray-500">Real-time status message monitoring</p>
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="subtype-select" className="text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                  Message Subtype
+                </label>
+                <select
+                  id="subtype-select"
+                  value={messageSubtype}
+                  onChange={(e) => setMessageSubtype(e.target.value)}
+                  className="text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer"
+                >
+                  {MESSAGE_SUBTYPES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
           
           <div className="mt-4 sm:mt-0 flex flex-col items-end space-y-2">
             <button
-              onClick={refresh}
+              onClick={() => refresh(messageSubtype, inputValToDdmmyyyy(selectedDate))}
               disabled={isRefreshing || !isConnected}
               className={`inline-flex items-center px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
                 isRefreshing 
@@ -88,8 +126,16 @@ function App() {
                   Log Out
                 </button>
               )}
-              <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 italic">
-                Messages are older than: <span className="font-bold">{displayStartDate}</span>
+              <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 flex items-center gap-1.5">
+                <span className="italic font-semibold">Messages older than:</span>
+                <input
+                  id="start-date-picker"
+                  type="date"
+                  value={selectedDate}
+                  max={todayInputVal}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="text-xs font-bold text-blue-700 bg-transparent border-none outline-none cursor-pointer"
+                />
               </span>
               <span className="bg-gray-100 px-2 py-1 rounded">
                 Last refresh: {lastRefreshTime}
