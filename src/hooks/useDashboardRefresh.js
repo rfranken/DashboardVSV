@@ -15,6 +15,7 @@ const getApiBase = () => {
 
 export function useDashboardRefresh() {
   const [data, setData] = useState({});
+  const [prevData, setPrevData] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentDomain, setCurrentDomain] = useState(null);
   const [lastRefreshTime, setLastRefreshTime] = useState('-');
@@ -87,10 +88,16 @@ export function useDashboardRefresh() {
         const newDataForDomain = await response.json();
         
         // Update data
-        setData(prev => ({
-          ...prev,
-          [domain]: newDataForDomain
-        }));
+        setData(prev => {
+          setPrevData(oldPrev => ({
+            ...oldPrev,
+            [domain]: prev[domain]
+          }));
+          return {
+            ...prev,
+            [domain]: newDataForDomain
+          };
+        });
 
         // Capture startDate if available
         if (newDataForDomain.start_date) {
@@ -111,6 +118,7 @@ export function useDashboardRefresh() {
 
   return {
     data,
+    prevData,
     DOMAINS,
     isRefreshing,
     currentDomain,

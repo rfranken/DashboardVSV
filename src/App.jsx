@@ -8,6 +8,7 @@ import './index.css';
 function App() {
   const { 
     data, 
+    prevData,
     DOMAINS, 
     isRefreshing, 
     currentDomain, 
@@ -146,7 +147,7 @@ function App() {
 
         {/* Dashboard Grid Workspace */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-1">
-          <DashboardTable data={data} domains={DOMAINS} currentDomain={currentDomain} />
+          <DashboardTable data={data} prevData={prevData} domains={DOMAINS} currentDomain={currentDomain} />
         </div>
         
       </div>

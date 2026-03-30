@@ -11,7 +11,7 @@ const STATUS_ROWS = [
   { label: 'Onbekend', prefix: 'ON', id: 'ON' }
 ];
 
-export default function DashboardTable({ data, currentDomain, domains }) {
+export default function DashboardTable({ data, prevData = {}, currentDomain, domains }) {
   // Helper to determine text color
   const getCellColorClass = (value, prefix) => {
     if (value === undefined || value === null) return 'text-black font-semibold opacity-30'; // placeholder state
@@ -64,9 +64,18 @@ export default function DashboardTable({ data, currentDomain, domains }) {
                 // Get value from data object for this domain, handling un-fetched state
                 const domainData = data[domain] || {};
                 const value = domainData[cellKey];
+                
+                // Get previous value for difference indicator
+                const prevDomainData = prevData[domain] || {};
+                const prevValue = prevDomainData[cellKey];
 
                 return (
-                  <td key={cellKey} className="whitespace-nowrap px-1.5 py-3 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0">
+                  <td key={cellKey} className="whitespace-nowrap px-1.5 py-3 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0 relative">
+                    {prevValue !== undefined && value > prevValue && (
+                      <span className={`absolute top-0.5 left-1 text-[10px] opacity-80 ${getCellColorClass(value, row.prefix)}`}>
+                        +{value - prevValue}
+                      </span>
+                    )}
                     <span className={getCellColorClass(value, row.prefix)}>
                       {value !== undefined ? value : '-'}
                     </span>
