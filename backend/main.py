@@ -49,13 +49,19 @@ def connect_database(request: ConnectionRequest):
     Manual override to initialize the database pool with the provided credentials.
     Optionally accepts dsn and db_user so the user can choose the environment in the UI.
     """
-    success = init_pool(
+    result = init_pool(
         password=request.password,
         dsn=request.dsn,
         db_user=request.db_user,
     )
-    if not success:
-        raise HTTPException(status_code=401, detail="Authentication failed or database refused connection.")
+    if result is not True:
+        dsn_label = request.dsn or "database"
+        if result == 'auth_error':
+            detail = f"Invalid combination of username and password for '{dsn_label}'."
+        else:
+            detail = f"Connection to '{dsn_label}' cannot be established."
+        raise HTTPException(status_code=401, detail=detail)
+
     return {"status": "success", "message": "Database connected successfully"}
 
 @app.post("/api/disconnect")

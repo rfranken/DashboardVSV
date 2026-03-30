@@ -54,7 +54,7 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
         if not db_password:
             log_message("No password provided. Pool initialization deferred.", category="AUTH")
             print("No password provided. Pool initialization deferred.")
-            return False
+            return 'no_password'
 
         # Resolve DSN and user: UI-selected values take precedence over .env defaults
         resolved_dsn  = dsn     or os.environ.get("DB_DSN", os.environ.get("DB_TNSENTRY_NAME"))
@@ -77,9 +77,13 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
         print("Successfully created Oracle Connection Pool")
         return True
     except Exception as e:
-        log_message(f"Failed to create Oracle pool: {str(e)}", category="ERROR")
+        err_str = str(e)
+        log_message(f"Failed to create Oracle pool: {err_str}", category="ERROR")
         print(f"Failed to create Oracle pool: {e}")
-        return False
+        # ORA-01017: invalid username/password
+        if 'ORA-01017' in err_str:
+            return 'auth_error'
+        return 'connection_error'
 
 def get_status_counts(domain: str, subtype: str = 'SmartReadingsNotification', start_date: str = '17012025'):
     """
