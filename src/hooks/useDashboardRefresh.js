@@ -52,7 +52,7 @@ export function useDashboardRefresh() {
     setDbConfig({ user: '-', dsn: '-' });
   }, [API_BASE]);
 
-  const refresh = useCallback(async (subtype = 'SmartReadingsNotification', startDate = '') => {
+  const refresh = useCallback(async (subtype = 'SmartReadingsNotification', startDate = '', endpointType = 'status') => {
     if (isRefreshing) return;
 
     // Verify connection before starting sequence
@@ -69,9 +69,9 @@ export function useDashboardRefresh() {
       setCurrentDomain(domain);
       
       try {
-        const url = new URL(`${API_BASE}/api/status`);
+        const url = new URL(`${API_BASE}/api/${endpointType}`);
         url.searchParams.set('domain', domain);
-        url.searchParams.set('subtype', subtype);
+        if (subtype) url.searchParams.set('subtype', subtype);
         if (startDate) url.searchParams.set('start_date', startDate);
         const response = await fetch(url.toString());
         

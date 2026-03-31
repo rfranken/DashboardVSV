@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, is_connected, close_pool, get_active_credentials
+from database import init_pool, get_status_counts, get_readings_counts, is_connected, close_pool, get_active_credentials
 import os
 import traceback
 from pydantic import BaseModel
@@ -134,4 +134,47 @@ def read_status(
     except Exception as e:
         tb = traceback.format_exc()
         log_message(f"UNHANDLED EXCEPTION in /api/status (domain={domain}):\n{tb}", category="ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/readings")
+def read_readings(
+    domain: str,
+    start_date: str = '',
+):
+    """
+    Returns the smart meter readings counts for a specified domain.
+    start_date: DDMMYYYY string from the UI date picker; falls back to DEFAULT_START_DATE env var.
+    """
+    from logger import log_message
+    try:
+        # UI-supplied date wins; fall back to env default
+        resolved_start_date = start_date or os.environ.get("DEFAULT_START_DATE", "17012025")
+
+        results, debug_sql = get_readings_counts(domain, resolved_start_date)
+        
+        domain_suffix = domain.replace('DOM', '')
+        transformed_data = {}
+        
+        for row in results:
+            proces_id = row['PROCESID']
+            count = row['AANTAL']
+            key = f"{proces_id}_{domain_suffix}"
+            transformed_data[key] = count
+            
+        payload = { **transformed_data }
+        
+        if os.environ.get("DEBUG_MODE", "OFF") == "ON":
+            payload["_debug"] = {
+                "sql": debug_sql,
+                "context": f"Fetching readings counts for {domain}",
+                "start_date_used": resolved_start_date,
+            }
+            
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        log_message(f"UNHANDLED EXCEPTION in /api/readings (domain={domain}):\n{tb}", category="ERROR")
         raise HTTPException(status_code=500, detail=str(e))

@@ -148,3 +148,49 @@ def get_status_counts(domain: str, subtype: str = 'SmartReadingsNotification', s
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err
 
+def get_readings_counts(domain: str, start_date: str = '17012025'):
+    """
+    Executes the query to fetch reading counts for a specific domain and start date.
+    """
+    if not _pool:
+        raise Exception("Database pool is not initialized")
+        
+    if not domain.startswith('DOM') or not domain[3:].isdigit():
+        raise ValueError("Invalid domain identifier format.")
+        
+    schema_name = f"{domain}ADMIN"
+    # Robustness: Extract only the DDMMYYYY part (first 8 chars) before using in SQL
+    safe_start_date = start_date.split(':')[0][:8]
+    
+    sql = f"""
+    SELECT GMRE.SCODE      AS PROCESID
+    ,      COUNT(*)        AS AANTAL
+    FROM   {schema_name}.G_BLOCKING_EVENT EVENT      
+    JOIN   {schema_name}.G_MUTATION_REASON_ENUM GMRE
+      ON   GMRE.LID = EVENT.LPROCESSID
+    WHERE  EVENT.LTYPEID IN ( 23 )
+    AND    EVENT.lstate IN ( 1 )
+    AND    EVENT.TMODIFIEDAT > TO_DATE('{safe_start_date}', 'DDMMYYYY')
+    GROUP BY GMRE.SCODE
+    """
+
+    context_str = f"Fetching readings counts for {domain}"
+    bind_params = {}
+    
+    try:
+        with _pool.acquire() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, bind_params)
+                
+                columns = [col[0] for col in cursor.description]
+                cursor.rowfactory = lambda *args: dict(zip(columns, args))
+                results = cursor.fetchall()
+                
+                # Log success
+                log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
+                
+                return results, sql
+    except Exception as db_err:
+        log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
+        raise db_err
+
