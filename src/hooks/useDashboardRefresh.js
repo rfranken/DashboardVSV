@@ -52,7 +52,7 @@ export function useDashboardRefresh() {
     setDbConfig({ user: '-', dsn: '-' });
   }, [API_BASE]);
 
-  const refresh = useCallback(async (subtype = 'SmartReadingsNotification', startDate = '', endpointType = 'status') => {
+  const refresh = useCallback(async (subtype = 'SmartReadingsNotification', startDate = '', endpointType = 'status', readingDate = '') => {
     if (isRefreshing) return;
 
     // Verify connection before starting sequence
@@ -73,6 +73,7 @@ export function useDashboardRefresh() {
         url.searchParams.set('domain', domain);
         if (subtype) url.searchParams.set('subtype', subtype);
         if (startDate) url.searchParams.set('start_date', startDate);
+        if (endpointType === 'readings' && readingDate) url.searchParams.set('reading_date', readingDate);
         const response = await fetch(url.toString());
         
         if (response.status === 401) {
@@ -95,7 +96,7 @@ export function useDashboardRefresh() {
           }));
           return {
             ...prev,
-            [domain]: newDataForDomain
+            [domain]: { ...prev[domain], ...newDataForDomain }
           };
         });
 

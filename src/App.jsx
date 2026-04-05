@@ -6,6 +6,19 @@ import ReadingsPage from './pages/ReadingsPage';
 import { useDashboardRefresh } from './hooks/useDashboardRefresh';
 import './index.css';
 
+// Helper functions for date formatting
+const ddmmyyyyToInputVal = (ddmmyyyy) => {
+  const s = (ddmmyyyy || '').replace(/\D/g, '');
+  if (s.length < 8) return '';
+  return `${s.substring(4, 8)}-${s.substring(2, 4)}-${s.substring(0, 2)}`;
+};
+
+const inputValToDdmmyyyy = (val) => {
+  if (!val) return '';
+  const [y, m, d] = val.split('-');
+  return `${d}${m}${y}`;
+};
+
 function App() {
   const { 
     data, 
@@ -23,12 +36,18 @@ function App() {
   } = useDashboardRefresh();
 
   const [defaultStartDate, setDefaultStartDate] = useState('');
+  const [readingDate, setReadingDate] = useState('');
+  const [sharedDate, setSharedDate] = useState('');
 
-  // Seed default start date on mount
+  // Seed default start date and reading date on mount
   useEffect(() => {
     checkConnection().then((status) => {
       if (status?.default_start_date) {
         setDefaultStartDate(status.default_start_date);
+        setSharedDate(ddmmyyyyToInputVal(status.default_start_date));
+      }
+      if (status?.reading_date) {
+        setReadingDate(status.reading_date);
       }
     });
   }, [checkConnection]);
@@ -53,7 +72,7 @@ function App() {
         {/* Tab Navigation Menu */}
         <nav className="flex space-x-1 border-b border-gray-200 mb-6">
           <NavLink to="/" end className={({ isActive }) => tabClass(isActive)}>
-            Status
+            Messages
           </NavLink>
           <NavLink to="/readings" className={({ isActive }) => tabClass(isActive)}>
             Readings
@@ -74,6 +93,9 @@ function App() {
               refresh={refresh}
               disconnect={disconnect}
               defaultStartDate={defaultStartDate}
+              selectedDate={sharedDate}
+              setSelectedDate={setSharedDate}
+              inputValToDdmmyyyy={inputValToDdmmyyyy}
             />
           } />
           <Route path="/readings" element={
@@ -89,6 +111,11 @@ function App() {
               refresh={refresh}
               disconnect={disconnect}
               defaultStartDate={defaultStartDate}
+              readingDate={readingDate}
+              selectedDate={sharedDate}
+              setSelectedDate={setSharedDate}
+              inputValToDdmmyyyy={inputValToDdmmyyyy}
+              ddmmyyyyToInputVal={ddmmyyyyToInputVal}
             />
           } />
         </Routes>

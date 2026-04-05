@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, get_readings_counts, is_connected, close_pool, get_active_credentials
+from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, is_connected, close_pool, get_active_credentials
 import os
 import traceback
 from pydantic import BaseModel
@@ -19,7 +19,8 @@ origins = ["http://localhost:5173", "http://127.0.0.1:5173"] if local_mode else 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    # allow_credentials cannot be True when origin is '*'
+    allow_credentials=local_mode,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -41,6 +42,7 @@ def connection_status():
         "user": active_user,
         "dsn":  active_dsn,
         "default_start_date": os.environ.get("DEFAULT_START_DATE", ""),
+        "reading_date": os.environ.get("READING_DATE", ""),
     }
 
 @app.post("/api/connect")
@@ -140,10 +142,12 @@ def read_status(
 def read_readings(
     domain: str,
     start_date: str = '',
+    reading_date: str = None,
 ):
     """
     Returns the smart meter readings counts for a specified domain.
-    start_date: DDMMYYYY string from the UI date picker; falls back to DEFAULT_START_DATE env var.
+    start_date: DDMMYYYY string from the UI start date picker.
+    reading_date: Optional DDMMYYYY string for the Accepted Readings filter.
     """
     from logger import log_message
     try:
@@ -151,6 +155,9 @@ def read_readings(
         resolved_start_date = start_date or os.environ.get("DEFAULT_START_DATE", "17012025")
 
         results, debug_sql = get_readings_counts(domain, resolved_start_date)
+        
+        # New: Get accepted readings count
+        accepted_count, accepted_sql = get_accepted_readings_counts(domain, resolved_start_date, reading_date)
         
         domain_suffix = domain.replace('DOM', '')
         transformed_data = {}
@@ -161,11 +168,15 @@ def read_readings(
             key = f"{proces_id}_{domain_suffix}"
             transformed_data[key] = count
             
+        # Add the Accepted row data
+        transformed_data[f"ACCEPTED_{domain_suffix}"] = accepted_count
+            
         payload = { **transformed_data }
         
         if os.environ.get("DEBUG_MODE", "OFF") == "ON":
             payload["_debug"] = {
                 "sql": debug_sql,
+                "accepted_sql": accepted_sql,
                 "context": f"Fetching readings counts for {domain}",
                 "start_date_used": resolved_start_date,
             }

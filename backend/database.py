@@ -194,3 +194,52 @@ def get_readings_counts(domain: str, start_date: str = '17012025'):
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err
 
+def get_accepted_readings_counts(domain: str, start_date: str = '17012025', reading_date: str = None):
+    """
+    Executes the query to fetch accepted reading counts for a specific domain.
+    Filters by the user-selected date (START DATETIME) and the .env READING_DATE (or user-supplied reading_date).
+    """
+    if not _pool:
+        raise Exception("Database pool is not initialized")
+        
+    if not domain.startswith('DOM') or not domain[3:].isdigit():
+        raise ValueError("Invalid domain identifier format.")
+        
+    schema_name = f"{domain}ADMIN"
+    
+    # User-selected date (START DATETIME) - append midnight time for HH24:MI:SS
+    safe_start_date = start_date.split(':')[0][:8]
+    
+    # Supply from .env if not provided by caller; then strip dashes/dots for DDMMYYYY
+    env_reading_date = reading_date if reading_date else os.environ.get("READING_DATE", "01032025")
+    safe_reading_date = env_reading_date.replace("-", "").replace(".", "").replace("/", "")[:8]
+    
+    sql = f"""
+    SELECT COUNT(*) AS AANTAL
+    FROM   {schema_name}.G_ALL_ITS_VALUES_VIEW AV
+    WHERE  AV.TMODIFIED > TO_DATE('{safe_start_date}:00:00:00', 'DDMMYYYY:HH24:MI:SS')
+    AND    AV.LSTATUS IN (150, 125 ) -- gemeten resp. berekend
+    AND    AV.TTIME = CAST(FROM_TZ(CAST( TO_DATE('{safe_reading_date}', 'DDMMYYYY') AS TIMESTAMP), 'CET') AT TIME ZONE 'UTC' AS DATE)
+    """
+
+    context_str = f"Fetching accepted readings counts for {domain}"
+    bind_params = {}
+    
+    try:
+        with _pool.acquire() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, bind_params)
+                
+                columns = [col[0] for col in cursor.description]
+                cursor.rowfactory = lambda *args: dict(zip(columns, args))
+                results = cursor.fetchone() # We only expect one count row
+                
+                # Log success
+                log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
+                
+                # Returns count (results['AANTAL']) and the query for debug
+                return results['AANTAL'] if results else 0, sql
+    except Exception as db_err:
+        log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
+        raise db_err
+

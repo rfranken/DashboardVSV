@@ -29,7 +29,7 @@ export default function DashboardTable({ data, prevData = {}, currentDomain, dom
         <thead className="bg-gray-50">
           <tr>
             <th scope="col" className="py-2.5 pl-4 pr-2 text-left text-sm font-semibold text-gray-900 sm:pl-6 bg-gray-100 border-r border-gray-200 sticky left-0 w-40 z-10">
-              Status
+              Message Status
             </th>
             {domains.map((domain) => {
               const debugInfo = data[domain]?._debug;

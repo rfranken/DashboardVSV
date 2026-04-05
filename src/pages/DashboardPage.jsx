@@ -2,19 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import DashboardTable from '../components/DashboardTable';
 
-// Helper functions for date formatting
-const ddmmyyyyToInputVal = (ddmmyyyy) => {
-  const s = (ddmmyyyy || '').replace(/\D/g, '');
-  if (s.length < 8) return '';
-  return `${s.substring(4, 8)}-${s.substring(2, 4)}-${s.substring(0, 2)}`;
-};
-
-const inputValToDdmmyyyy = (val) => {
-  if (!val) return '';
-  const [y, m, d] = val.split('-');
-  return `${d}${m}${y}`;
-};
-
 const MESSAGE_SUBTYPES = [
   'SmartReadingsNotification',
   'VolumeSeriesNotification',
@@ -32,30 +19,18 @@ export default function DashboardPage({
   dbConfig,
   refresh,
   disconnect,
-  defaultStartDate
+  defaultStartDate,
+  selectedDate,
+  setSelectedDate,
+  inputValToDdmmyyyy
 }) {
   const todayInputVal = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState('');
   const [messageSubtype, setMessageSubtype] = useState('SmartReadingsNotification');
-  const [hasInitialRefresh, setHasInitialRefresh] = useState(false);
 
-  // Seed default start date when available
-  useEffect(() => {
-    if (defaultStartDate) {
-      setSelectedDate(ddmmyyyyToInputVal(defaultStartDate));
-    }
-  }, [defaultStartDate]);
+  // Removed automatic initial fetch to follow user requirement
 
-  // Initial fetch when connection is ready
-  useEffect(() => {
-    if (isConnected && !hasInitialRefresh) {
-      setHasInitialRefresh(true);
-      // Wait a moment for date state to settle if it was just seeded
-      setTimeout(() => {
-        refresh(messageSubtype, inputValToDdmmyyyy(selectedDate));
-      }, 0);
-    }
-  }, [isConnected, hasInitialRefresh, refresh, messageSubtype, selectedDate]);
+  // Removed automatic initial fetch to follow user requirement: 
+  // "Only execute the queries in a page when the refresh button has been pressed."
 
   return (
     <div className="max-w-screen-2xl mx-auto space-y-6">
@@ -64,7 +39,7 @@ export default function DashboardPage({
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">DashboardVSV</h1>
           <div className="flex items-center gap-3 mt-1">
-            <p className="text-sm text-gray-500">Real-time status message monitoring</p>
+            <p className="text-sm text-gray-500">Real-time message monitoring</p>
             <div className="flex items-center gap-1.5">
               <label htmlFor="subtype-select" className="text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                 Message Subtype
@@ -113,7 +88,7 @@ export default function DashboardPage({
               </button>
             )}
             <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 flex items-center gap-1.5">
-              <span className="italic font-semibold">Messages older than:</span>
+              <span className="italic font-semibold">Messages received after:</span>
               <input
                 id="start-date-picker"
                 type="date"

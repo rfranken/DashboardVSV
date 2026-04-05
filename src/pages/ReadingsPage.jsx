@@ -1,19 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import ReadingsTable from '../components/ReadingsTable';
-
-// Helper functions for date formatting
-const ddmmyyyyToInputVal = (ddmmyyyy) => {
-  const s = (ddmmyyyy || '').replace(/\D/g, '');
-  if (s.length < 8) return '';
-  return `${s.substring(4, 8)}-${s.substring(2, 4)}-${s.substring(0, 2)}`;
-};
-
-const inputValToDdmmyyyy = (val) => {
-  if (!val) return '';
-  const [y, m, d] = val.split('-');
-  return `${d}${m}${y}`;
-};
+import AcceptedReadingsTable from '../components/AcceptedReadingsTable';
 
 export default function ReadingsPage({
   data,
@@ -26,30 +14,27 @@ export default function ReadingsPage({
   dbConfig,
   refresh,
   disconnect,
-  defaultStartDate
+  defaultStartDate,
+  readingDate,
+  selectedDate,
+  setSelectedDate,
+  inputValToDdmmyyyy,
+  ddmmyyyyToInputVal
 }) {
   const todayInputVal = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState('');
-  const [hasInitialRefresh, setHasInitialRefresh] = useState(false);
+  const [acceptedReadingDate, setAcceptedReadingDate] = useState('');
 
-  // Seed default start date when available
+  // Seed local acceptedReadingDate from .env default
   useEffect(() => {
-    if (defaultStartDate) {
-      setSelectedDate(ddmmyyyyToInputVal(defaultStartDate));
+    if (readingDate) {
+      setAcceptedReadingDate(ddmmyyyyToInputVal(readingDate));
     }
-  }, [defaultStartDate]);
+  }, [readingDate, ddmmyyyyToInputVal]);
 
-  // Initial fetch when connection is ready
-  useEffect(() => {
-    if (isConnected && !hasInitialRefresh) {
-      setHasInitialRefresh(true);
-      // Wait a moment for date state to settle
-      setTimeout(() => {
-        // We pass null for subtype to satisfy the signature but trigger '/api/readings' via the third argument
-        refresh(null, inputValToDdmmyyyy(selectedDate), 'readings');
-      }, 0);
-    }
-  }, [isConnected, hasInitialRefresh, refresh, selectedDate]);
+  // Removed automatic initial fetch to follow user requirement
+
+  // Removed automatic initial fetch to follow user requirement: 
+  // "Only execute the queries in a page when the refresh button has been pressed."
 
   return (
     <div className="max-w-screen-2xl mx-auto space-y-6">
@@ -64,7 +49,7 @@ export default function ReadingsPage({
         
         <div className="mt-4 sm:mt-0 flex flex-col items-end space-y-2">
           <button
-            onClick={() => refresh(null, inputValToDdmmyyyy(selectedDate), 'readings')}
+            onClick={() => refresh(null, inputValToDdmmyyyy(selectedDate), 'readings', inputValToDdmmyyyy(acceptedReadingDate))}
             disabled={isRefreshing || !isConnected}
             className={`inline-flex items-center px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
               isRefreshing 
@@ -92,7 +77,7 @@ export default function ReadingsPage({
               </button>
             )}
             <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 flex items-center gap-1.5">
-              <span className="italic font-semibold">Readings older than:</span>
+              <span className="italic font-semibold">Readings received after:</span>
               <input
                 id="start-date-picker"
                 type="date"
@@ -110,8 +95,34 @@ export default function ReadingsPage({
       </div>
 
       {/* Dashboard Grid Workspace */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-1">
-        <ReadingsTable data={data} prevData={prevData} domains={DOMAINS} currentDomain={currentDomain} />
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+          <h2 className="text-lg font-bold text-gray-800">VSV Events (Uitval)</h2>
+        </div>
+        <div className="p-1">
+          <ReadingsTable data={data} prevData={prevData} domains={DOMAINS} currentDomain={currentDomain} />
+        </div>
+      </div>
+
+      {/* New Accepted Readings Panel */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center flex-wrap gap-y-2">
+            <span>Accepted Readings for reading date</span>
+            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100 flex items-center gap-1.5 mx-2">
+              <input
+                type="date"
+                value={acceptedReadingDate}
+                onChange={(e) => setAcceptedReadingDate(e.target.value)}
+                className="text-sm font-bold text-blue-700 bg-transparent border-none outline-none cursor-pointer"
+              />
+            </span>
+            <span>Non-exact</span>
+          </h2>
+        </div>
+        <div className="p-1">
+          <AcceptedReadingsTable data={data} domains={DOMAINS} currentDomain={currentDomain} />
+        </div>
       </div>
       
     </div>
