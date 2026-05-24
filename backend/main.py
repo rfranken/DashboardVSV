@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, get_parked_readings_counts, is_connected, close_pool, get_active_credentials
+from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, get_parked_readings_counts, get_message_details, is_connected, close_pool, get_active_credentials
 import os
 import traceback
 from pydantic import BaseModel
@@ -213,4 +213,40 @@ def read_readings(
     except Exception as e:
         tb = traceback.format_exc()
         log_message(f"UNHANDLED EXCEPTION in /api/readings (domain={domain}):\n{tb}", category="ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/message-details")
+def read_message_details(
+    domain: str,
+    status_prefix: str,
+    subtype: str = 'SmartReadingsNotification',
+    start_date: str = '',
+):
+    """
+    Returns individual message details (bestandsnaam, aanmaakdatum) for a specified domain, status and subtype.
+    """
+    from logger import log_message
+    try:
+        resolved_start_date = start_date or os.environ.get("DEFAULT_START_DATE", "17012025")
+
+        results, debug_sql = get_message_details(domain, status_prefix, subtype, resolved_start_date)
+        
+        payload = {
+            "messages": results
+        }
+        
+        if os.environ.get("DEBUG_MODE", "OFF") == "ON":
+            payload["_debug"] = {
+                "sql": debug_sql,
+                "context": f"Fetching message details for {domain} status {status_prefix}",
+                "start_date_used": resolved_start_date,
+            }
+            
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        log_message(f"UNHANDLED EXCEPTION in /api/message-details (domain={domain}, status={status_prefix}):\n{tb}", category="ERROR")
         raise HTTPException(status_code=500, detail=str(e))

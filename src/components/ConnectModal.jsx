@@ -43,7 +43,13 @@ const ConnectModal = ({ isOpen, onConnect }) => {
 
       onConnect();
     } catch (err) {
-      setError(err.message);
+      // TypeError = true network failure (backend down, CORS block, etc.)
+      // Any other Error = we threw it ourselves after reading the response body → show as-is
+      setError(
+        err instanceof TypeError
+          ? 'Unable to reach the backend server. Please verify the application is running.'
+          : (err?.message || 'Connection failed.')
+      );
     } finally {
       setIsLoading(false);
     }
@@ -129,12 +135,7 @@ const ConnectModal = ({ isOpen, onConnect }) => {
               </div>
             </div>
 
-            {error && (
-              <div className="flex items-center space-x-2 p-3.5 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm animate-in shake duration-300">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                <span className="font-medium">{error}</span>
-              </div>
-            )}
+            {/* Inline error has been replaced by the modal overlay below */}
 
             <button
               type="submit"
@@ -157,6 +158,34 @@ const ConnectModal = ({ isOpen, onConnect }) => {
           </p>
         </div>
       </div>
+
+      {/* Error Modal Overlay */}
+      {error && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+            <div className="bg-red-50 p-6 border-b border-red-100 flex items-start gap-4">
+              <div className="flex-shrink-0 bg-red-100 p-2 rounded-full">
+                <svg className="h-6 w-6 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div className="flex-1 mt-0.5">
+                <h3 className="text-lg font-bold text-red-900">Connection Failed</h3>
+                <p className="mt-2 text-sm text-red-700 font-medium break-words">{error}</p>
+              </div>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setError('')}
+                className="bg-white text-gray-700 hover:bg-gray-100 border border-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm transition-colors"
+                autoFocus
+              >
+                Acknowledge
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

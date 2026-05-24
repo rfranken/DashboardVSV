@@ -361,3 +361,77 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025'):
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err
 
+def get_message_details(domain: str, status_prefix: str, subtype: str = 'SmartReadingsNotification', start_date: str = '17012025'):
+    """
+    Executes the query to fetch individual message details (bestandsnaam, aanmaakdatum)
+    for a specific domain, message status and start date.
+    """
+    if not _pool:
+        raise Exception("Database pool is not initialized")
+        
+    if not domain.startswith('DOM') or not domain[3:].isdigit():
+        raise ValueError("Invalid domain identifier format.")
+        
+    schema_name = f"{domain}ADMIN"
+    safe_start_date = start_date.split(':')[0][:8]
+    
+    # Map UI status prefix to DB status value
+    status_map = {
+        'A': ' = -6',
+        'VM': ' = -1',
+        'VW': ' = -1',
+        'WV': ' = 0',
+        'G': ' = 2',
+        'V': ' = 1',
+        'PG': ' = 7',
+        'ON': ' NOT IN (-6, -1, 0, 1, 2, 7)'
+    }
+    
+    status_cond = status_map.get(status_prefix, ' = -999')
+    
+    sql = f"""
+    SELECT IOM.LID                                                                            AS ID
+         , IOM.SFILENAME                                                                      AS BESTANDSNAAM
+         , CAST(FROM_TZ(CAST(IOM.TCREATED AS TIMESTAMP), 'UTC') AT TIME ZONE 'CET' AS DATE)   AS AANMAAKDATUM
+         , COUNT(DISTINCT MP.SCODE)                                                           AS AANTAL_AANSLUITINGEN
+    FROM {schema_name}.G_IO_ARCHIVE_MAIN IOM
+    JOIN {schema_name}.G_IO_ARCHIVE_SUBTYPE IOS
+      ON IOS.LID = IOM.LSUBTYPEID
+    LEFT JOIN {schema_name}.g_io_archive_tslink IOLINK
+      ON IOLINK.LARCHIVEID = IOM.LID
+    LEFT JOIN {schema_name}.G_TIMESERIES_MAIN TMS
+      ON TMS.LOBJID = IOLINK.LTSID
+    LEFT JOIN {schema_name}.G_MEASUREMENT MEASUREMENT
+      ON MEASUREMENT.LTSID = TMS.LOBJID
+    LEFT JOIN {schema_name}.G_METERING_POINT MP
+      ON MP.LOBJID = MEASUREMENT.LMETERINGPOINTID
+    WHERE (1 = 1)
+    AND IOS.SSUBTYPENAME = :subtype
+    AND IOM.TTIME >= TO_DATE('{safe_start_date}', 'DDMMYYYY')
+    AND IOM.LSTATUS {status_cond}
+    GROUP BY IOM.LID
+    ,        IOM.SFILENAME
+    ,        IOM.TCREATED
+    ORDER BY IOM.TCREATED DESC
+    """
+    
+    context_str = f"Fetching message details for {domain} status {status_prefix}"
+    bind_params = {'subtype': subtype}
+    
+    try:
+        with _pool.acquire() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, bind_params)
+                
+                columns = [col[0] for col in cursor.description]
+                cursor.rowfactory = lambda *args: dict(zip(columns, args))
+                results = cursor.fetchall()
+                
+                log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
+                
+                return results, sql
+    except Exception as db_err:
+        log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
+        raise db_err
+
+

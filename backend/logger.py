@@ -76,6 +76,20 @@ _archive_existing_log()
 
 
 # ---------------------------------------------------------------------------
+# Startup info logging
+# ---------------------------------------------------------------------------
+def _log_startup_info() -> None:
+    """Writes startup context to the application log."""
+    now_str = datetime.now().strftime("%d-%m-%Y %H:%M")
+    _logger.debug(f"Application started at {now_str}")
+    
+    if os.environ.get("DEBUG_MODE", "OFF") == "OFF":
+        _logger.debug("Debugging is OFF")
+
+_log_startup_info()
+
+
+# ---------------------------------------------------------------------------
 # Public API  (interface unchanged from original logger.py)
 # ---------------------------------------------------------------------------
 def log_sql(context: str, sql: str, params: dict, result: str, error_desc: str = None) -> None:

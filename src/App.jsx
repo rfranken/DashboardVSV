@@ -31,16 +31,11 @@ function App() {
     clearError,
   } = useDashboardRefresh();
 
-  const [defaultStartDate, setDefaultStartDate] = useState('');
   const [sharedDate, setSharedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Seed default start date on mount
+  // Check connection status on mount
   useEffect(() => {
-    checkConnection().then((status) => {
-      if (status?.default_start_date) {
-        setDefaultStartDate(status.default_start_date);
-      }
-    });
+    checkConnection();
   }, [checkConnection]);
 
   // Tab navigation class helper
@@ -58,11 +53,8 @@ function App() {
         isOpen={!isConnected}
         onConnect={() => {
           // Re-seed date state on every successful login (covers logout → re-login)
-          checkConnection().then((status) => {
+          checkConnection().then(() => {
             setIsConnected(true);
-            if (status?.default_start_date) {
-              setDefaultStartDate(status.default_start_date);
-            }
           });
         }}
       />
@@ -91,7 +83,6 @@ function App() {
               dbConfig={dbConfig}
               refresh={refresh}
               disconnect={disconnect}
-              defaultStartDate={defaultStartDate}
               selectedDate={sharedDate}
               setSelectedDate={setSharedDate}
               inputValToDdmmyyyy={inputValToDdmmyyyy}

@@ -22,6 +22,7 @@ export function useDashboardRefresh() {
   const [startDate, setStartDate] = useState('-');
   const [isConnected, setIsConnected] = useState(false); 
   const [dbConfig, setDbConfig] = useState({ user: '-', dsn: '-' });
+  const [error, setError] = useState(null);
 
   const API_BASE = getApiBase();
 
@@ -50,6 +51,7 @@ export function useDashboardRefresh() {
     setData({});
     setLastRefreshTime('-');
     setDbConfig({ user: '-', dsn: '-' });
+    setError(null);
   }, [API_BASE]);
 
   const refresh = useCallback(async (subtype = 'SmartReadingsNotification', startDate = '', endpointType = 'status', readingDate = '') => {
@@ -63,6 +65,7 @@ export function useDashboardRefresh() {
     }
 
     setIsRefreshing(true);
+    setError(null);
     
     // Starting sequential loop
     for (const domain of DOMAINS) {
@@ -82,8 +85,17 @@ export function useDashboardRefresh() {
         }
 
         if (!response.ok) {
-           console.error(`Backend returned HTTP ${response.status} for ${domain}`);
-           continue; 
+           let errMsg = `Backend returned HTTP ${response.status} for ${domain}`;
+           try {
+             const errorData = await response.json();
+             if (errorData && errorData.detail) errMsg = errorData.detail;
+           } catch {
+             // ignore JSON parse errors
+           }
+           
+           console.error(errMsg);
+           setError(errMsg);
+           break; 
         }
         
         const newDataForDomain = await response.json();
@@ -105,7 +117,15 @@ export function useDashboardRefresh() {
           setStartDate(newDataForDomain.start_date);
         }
       } catch (error) {
-        console.error(`Failed to fetch data for ${domain}:`, error);
+        const errStr = error?.message || String(error);
+        console.error(`Failed to fetch data for ${domain}:`, errStr);
+        // TypeError = true network failure; anything else is an application error — show as-is
+        setError(
+          error instanceof TypeError
+            ? 'Unable to reach the backend server. Please verify the application is running.'
+            : errStr
+        );
+        break;
       }
     }
 
@@ -131,5 +151,7 @@ export function useDashboardRefresh() {
     refresh,
     checkConnection,
     disconnect,
+    error,
+    clearError: () => setError(null),
   };
 }

@@ -12,7 +12,7 @@ const PROCESS_ROWS = [
   { label: 'MONTHMTR', id: 'MONTHMTR' },
 ];
 
-export default function ReadingsTable({ data = {}, prevData = {}, currentDomain, domains }) {
+export default function ReadingsTable({ data = {}, prevData = {}, currentDomain, domains, dataPrefix = '' }) {
   // Helper to determine text color
   const getCellColorClass = (value) => {
     if (value === undefined || value === null) return 'text-black font-semibold opacity-30'; // placeholder state
@@ -22,7 +22,7 @@ export default function ReadingsTable({ data = {}, prevData = {}, currentDomain,
   };
 
   return (
-    <div className="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg pb-10">
+    <div className="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
       <table className="min-w-full divide-y divide-gray-300">
         <thead className="bg-gray-50">
           <tr>
@@ -48,12 +48,12 @@ export default function ReadingsTable({ data = {}, prevData = {}, currentDomain,
         <tbody className="divide-y divide-gray-200 bg-white">
           {PROCESS_ROWS.map((row) => (
             <tr key={row.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap py-3 pl-4 pr-2 text-sm font-medium text-gray-900 sm:pl-6 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 w-40 overflow-hidden text-ellipsis">
+              <td className="whitespace-nowrap py-1.5 pl-4 pr-2 text-sm font-medium text-gray-900 sm:pl-6 bg-gray-50 border-r border-gray-200 sticky left-0 z-10 w-40 overflow-hidden text-ellipsis">
                 {row.label}
               </td>
               {domains.map((domain) => {
                 const domainId = domain.replace('DOM', '');
-                const cellKey = `${row.id}_${domainId}`;
+                const cellKey = `${dataPrefix}${row.id}_${domainId}`;
                 
                 // Get value from data object for this domain, handling un-fetched state
                 const domainData = data[domain] || {};
@@ -64,7 +64,7 @@ export default function ReadingsTable({ data = {}, prevData = {}, currentDomain,
                 const prevValue = prevDomainData[cellKey];
 
                 return (
-                  <td key={cellKey} className="whitespace-nowrap px-1.5 py-3 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0 relative">
+                  <td key={cellKey} className="whitespace-nowrap px-1.5 py-1.5 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0 relative">
                     {prevValue !== undefined && value > prevValue && (
                       <span className={`absolute top-0.5 left-1 text-[10px] opacity-80 ${getCellColorClass(value)}`}>
                         +{value - prevValue}

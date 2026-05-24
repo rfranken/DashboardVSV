@@ -11,7 +11,7 @@ const STATUS_ROWS = [
   { label: 'Onbekend', prefix: 'ON', id: 'ON' }
 ];
 
-export default function DashboardTable({ data, prevData = {}, currentDomain, domains }) {
+export default function DashboardTable({ data, prevData = {}, currentDomain, domains, onCellClick }) {
   // Helper to determine text color
   const getCellColorClass = (value, prefix) => {
     if (value === undefined || value === null) return 'text-black font-semibold opacity-30'; // placeholder state
@@ -32,8 +32,6 @@ export default function DashboardTable({ data, prevData = {}, currentDomain, dom
               Message Status
             </th>
             {domains.map((domain) => {
-              const debugInfo = data[domain]?._debug;
-              
               return (
                 <th key={domain} scope="col" className="px-1.5 py-2.5 text-center text-sm font-semibold text-gray-900 min-w-[3.5rem]">
                   <div className="flex flex-col items-center justify-center space-y-1">
@@ -76,9 +74,18 @@ export default function DashboardTable({ data, prevData = {}, currentDomain, dom
                         +{value - prevValue}
                       </span>
                     )}
-                    <span className={getCellColorClass(value, row.prefix)}>
-                      {value !== undefined ? value : '-'}
-                    </span>
+                    {value !== undefined && value > 0 && onCellClick ? (
+                      <button
+                        onClick={() => onCellClick(domain, row.prefix, row.label, value)}
+                        className={`${getCellColorClass(value, row.prefix)} hover:underline cursor-pointer focus:outline-none`}
+                      >
+                        {value}
+                      </button>
+                    ) : (
+                      <span className={getCellColorClass(value, row.prefix)}>
+                        {value !== undefined ? value : '-'}
+                      </span>
+                    )}
                   </td>
                 );
               })}

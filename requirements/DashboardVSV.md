@@ -110,4 +110,4 @@ When the debug mode is ON, or active, the following happens:
     - SQL: The SQL, exactly in the way it was handed over to the database, so with bind parameters included
     - Result: Either 'OK' or 'ERROR'. 
     - Error description: In case the Result was 'ERROR': the error that was returned by the database system.
-- If there are fields that are dynamic dropdown fields, so which are filled by an SQL have a 'i' icon behind their labels. This icon contains a tooltip in which the SQL is shown.
+- If there are fields that are filled by an SQL, an 'i' icon is displayed behind their labels. This icon contains a tooltip in which the SQL is shown.
