@@ -7,12 +7,6 @@ import { useDashboardRefresh } from './hooks/useDashboardRefresh';
 import './index.css';
 
 // Helper functions for date formatting
-const ddmmyyyyToInputVal = (ddmmyyyy) => {
-  const s = (ddmmyyyy || '').replace(/\D/g, '');
-  if (s.length < 8) return '';
-  return `${s.substring(4, 8)}-${s.substring(2, 4)}-${s.substring(0, 2)}`;
-};
-
 const inputValToDdmmyyyy = (val) => {
   if (!val) return '';
   const [y, m, d] = val.split('-');
@@ -32,22 +26,19 @@ function App() {
     refresh,
     checkConnection,
     disconnect,
-    setIsConnected
+    setIsConnected,
+    error,
+    clearError,
   } = useDashboardRefresh();
 
   const [defaultStartDate, setDefaultStartDate] = useState('');
-  const [readingDate, setReadingDate] = useState('');
-  const [sharedDate, setSharedDate] = useState('');
+  const [sharedDate, setSharedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Seed default start date and reading date on mount
+  // Seed default start date on mount
   useEffect(() => {
     checkConnection().then((status) => {
       if (status?.default_start_date) {
         setDefaultStartDate(status.default_start_date);
-        setSharedDate(ddmmyyyyToInputVal(status.default_start_date));
-      }
-      if (status?.reading_date) {
-        setReadingDate(status.reading_date);
       }
     });
   }, [checkConnection]);
@@ -65,7 +56,15 @@ function App() {
       {/* Secure Connection Pop-up works globally for both routes */}
       <ConnectModal
         isOpen={!isConnected}
-        onConnect={() => setIsConnected(true)}
+        onConnect={() => {
+          // Re-seed date state on every successful login (covers logout → re-login)
+          checkConnection().then((status) => {
+            setIsConnected(true);
+            if (status?.default_start_date) {
+              setDefaultStartDate(status.default_start_date);
+            }
+          });
+        }}
       />
 
       <div className="max-w-screen-2xl mx-auto">
@@ -96,6 +95,8 @@ function App() {
               selectedDate={sharedDate}
               setSelectedDate={setSharedDate}
               inputValToDdmmyyyy={inputValToDdmmyyyy}
+              error={error}
+              clearError={clearError}
             />
           } />
           <Route path="/readings" element={
@@ -110,12 +111,11 @@ function App() {
               dbConfig={dbConfig}
               refresh={refresh}
               disconnect={disconnect}
-              defaultStartDate={defaultStartDate}
-              readingDate={readingDate}
               selectedDate={sharedDate}
               setSelectedDate={setSharedDate}
               inputValToDdmmyyyy={inputValToDdmmyyyy}
-              ddmmyyyyToInputVal={ddmmyyyyToInputVal}
+              error={error}
+              clearError={clearError}
             />
           } />
         </Routes>

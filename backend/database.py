@@ -3,13 +3,45 @@ import oracledb
 from dotenv import load_dotenv
 from logger import log_sql, log_message
 
-# Load environment variables from the local .env file
-load_dotenv(override=True)
+# Load environment variables from the local .env file.
+# override=False means values already present in the environment (e.g. set by
+# Start-NetworkMode.ps1 before launching uvicorn) are NOT overwritten by .env.
+load_dotenv(override=False)
 
 # Global connection pool
 _pool = None
 _active_user = None
 _active_dsn  = None
+
+# ---------------------------------------------------------------------------
+# One-time Oracle thick-mode initialization (module level)
+# Oracle only allows this to be called once per process.
+# ---------------------------------------------------------------------------
+_oracle_client_initialized = False
+
+def _ensure_oracle_client():
+    global _oracle_client_initialized
+    if _oracle_client_initialized:
+        return
+    tns_admin = os.environ.get("TNS_ADMIN")
+    log_message(f"Initializing Oracle client. TNS_ADMIN: {tns_admin or 'Not set'}", category="INIT")
+    try:
+        if tns_admin:
+            oracledb.init_oracle_client(config_dir=tns_admin)
+            log_message("Oracle thick mode initialized with explicit config_dir.", category="INIT")
+        else:
+            oracledb.init_oracle_client()
+            log_message("Oracle thick mode initialized with default settings.", category="INIT")
+        _oracle_client_initialized = True
+    except Exception as e:
+        # If already initialized by a previous call, treat as success
+        err = str(e)
+        if 'already' in err.lower():
+            log_message(f"Oracle client already initialized: {err}", category="INIT")
+            _oracle_client_initialized = True
+        else:
+            log_message(f"Oracle client init failed: {err}", category="ERROR")
+            raise
 
 def is_connected():
     return _pool is not None
@@ -37,17 +69,9 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
         return True
         
     try:
-        # Enable thick mode to support local bequeath connections
-        tns_admin = os.environ.get("TNS_ADMIN")
-        log_message(f"Initializing Oracle client. TNS_ADMIN: {tns_admin or 'Not set'}", category="INIT")
-        
-        if tns_admin:
-            oracledb.init_oracle_client(config_dir=tns_admin)
-            log_message("Oracle thick mode initialized with explicit config_dir.", category="INIT")
-        else:
-            oracledb.init_oracle_client()
-            log_message("Oracle thick mode initialized with default settings.", category="INIT")
-        
+        # Ensure Oracle thick mode is initialized (idempotent)
+        _ensure_oracle_client()
+
         # Use provided password or fallback to environment (for convenience/legacy)
         db_password = password or os.environ.get("DB_PASSWORD")
         
@@ -83,7 +107,12 @@ def init_pool(password: str = None, dsn: str = None, db_user: str = None):
         # ORA-01017: invalid username/password
         if 'ORA-01017' in err_str:
             return 'auth_error'
-        return 'connection_error'
+        # TNS / network errors: ORA-12170 (timeout), ORA-12541 (no listener),
+        # ORA-12154 (TNS not resolved), ORA-12545 (connect failed)
+        TNS_CODES = ('ORA-12170', 'ORA-12541', 'ORA-12154', 'ORA-12545', 'ORA-12560')
+        if any(code in err_str for code in TNS_CODES):
+            return 'connection_error'
+        return err_str
 
 def get_status_counts(domain: str, subtype: str = 'SmartReadingsNotification', start_date: str = '17012025'):
     """
@@ -122,7 +151,7 @@ def get_status_counts(domain: str, subtype: str = 'SmartReadingsNotification', s
                 ON IOT.LID = IOM.LTYPEID 
         WHERE (1=1)
         AND IOS.SSUBTYPENAME = :subtype
-        AND IOM.TTIME  > TO_DATE('{safe_start_date}', 'DDMMYYYY')
+        AND IOM.TTIME  >= TO_DATE('{safe_start_date}', 'DDMMYYYY')
         GROUP BY IOM.LSTATUS
     ) TELLINGEN
     ORDER BY 1
@@ -170,7 +199,7 @@ def get_readings_counts(domain: str, start_date: str = '17012025'):
       ON   GMRE.LID = EVENT.LPROCESSID
     WHERE  EVENT.LTYPEID IN ( 23 )
     AND    EVENT.lstate IN ( 1 )
-    AND    EVENT.TMODIFIEDAT > TO_DATE('{safe_start_date}', 'DDMMYYYY')
+    AND    EVENT.TMODIFIEDAT >= TO_DATE('{safe_start_date}', 'DDMMYYYY')
     GROUP BY GMRE.SCODE
     """
 
@@ -194,10 +223,60 @@ def get_readings_counts(domain: str, start_date: str = '17012025'):
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err
 
-def get_accepted_readings_counts(domain: str, start_date: str = '17012025', reading_date: str = None):
+def get_parked_readings_counts(domain: str, start_date: str = '17012025'):
+    """
+    Executes the query to fetch parked reading counts for a specific domain and start date.
+    """
+    if not _pool:
+        raise Exception("Database pool is not initialized")
+        
+    if not domain.startswith('DOM') or not domain[3:].isdigit():
+        raise ValueError("Invalid domain identifier format.")
+        
+    schema_name = f"{domain}ADMIN"
+    # Robustness: Extract only the DDMMYYYY part (first 8 chars) before using in SQL
+    safe_start_date = start_date.split(':')[0][:8]
+    
+    sql = f"""
+    SELECT GMRE.SCODE     AS PROCESID
+    ,      COUNT(*)       AS AANTAL
+    FROM   {schema_name}.G_BLOCKING_EVENT       EVENT 
+    JOIN   {schema_name}.G_MUTATION_REASON_ENUM GMRE
+      ON   GMRE.LID = EVENT.LPROCESSID
+    JOIN   {schema_name}.G_IO_ARCHIVE_MAIN IOM
+      ON   IOM.LID   =  EVENT.LIMPORTMESSAGEID 
+    JOIN   {schema_name}.G_IO_ARCHIVE_SUBTYPE IOS
+      ON   IOS.LID = IOM.LSUBTYPEID
+     AND   IOS.SSUBTYPENAME ='SmartReadingsNotification'  
+    WHERE  EVENT.LTYPEID NOT IN (1,23) -- GEEN UITVAL
+    AND    EVENT.LSTATE  = 1 -- OPEN
+    AND    EVENT.TMODIFIEDAT >= TO_DATE('{safe_start_date}', 'DDMMYYYY')
+    GROUP BY GMRE.SCODE
+    """
+
+    context_str = f"Fetching parked readings counts for {domain}"
+    bind_params = {}
+    
+    try:
+        with _pool.acquire() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, bind_params)
+                
+                columns = [col[0] for col in cursor.description]
+                cursor.rowfactory = lambda *args: dict(zip(columns, args))
+                results = cursor.fetchall()
+                
+                # Log success
+                log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
+                
+                return results, sql
+    except Exception as db_err:
+        log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
+        raise db_err
+
+def get_accepted_readings_counts(domain: str, start_date: str = '17012025'):
     """
     Executes the query to fetch accepted reading counts for a specific domain.
-    Filters by the user-selected date (START DATETIME) and the .env READING_DATE (or user-supplied reading_date).
     """
     if not _pool:
         raise Exception("Database pool is not initialized")
@@ -207,19 +286,59 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025', read
         
     schema_name = f"{domain}ADMIN"
     
-    # User-selected date (START DATETIME) - append midnight time for HH24:MI:SS
+    # User-selected date (START DATETIME)
     safe_start_date = start_date.split(':')[0][:8]
     
-    # Supply from .env if not provided by caller; then strip dashes/dots for DDMMYYYY
-    env_reading_date = reading_date if reading_date else os.environ.get("READING_DATE", "01032025")
-    safe_reading_date = env_reading_date.replace("-", "").replace(".", "").replace("/", "")[:8]
-    
     sql = f"""
-    SELECT COUNT(*) AS AANTAL
-    FROM   {schema_name}.G_ALL_ITS_VALUES_VIEW AV
-    WHERE  AV.TMODIFIED > TO_DATE('{safe_start_date}:00:00:00', 'DDMMYYYY:HH24:MI:SS')
-    AND    AV.LSTATUS IN (150, 125 ) -- gemeten resp. berekend
-    AND    AV.TTIME = CAST(FROM_TZ(CAST( TO_DATE('{safe_reading_date}', 'DDMMYYYY') AS TIMESTAMP), 'CET') AT TIME ZONE 'UTC' AS DATE)
+    SELECT  MUT_REASON.SCODE      AS PROCESSID
+    ,       COUNT(STANDEN.DVALUE) AS AANTAL
+    FROM {schema_name}.G_METERING_POINT          METERING_POINT
+    JOIN {schema_name}.G_MP_DETAILS              DETAILS
+      ON DETAILS.LMPID = METERING_POINT.LOBJID
+     AND DETAILS.TSTART < sysdate
+     AND DETAILS.TSTOP  > sysdate 
+    JOIN {schema_name}.G_MP_DETAILS_UDT          DETAILS_UDT
+      ON DETAILS_UDT.LOBJID = DETAILS.LID
+    JOIN {schema_name}.G_MEASUREMENT             MEASUREMENT
+     ON  MEASUREMENT.LMETERINGPOINTID  = METERING_POINT.LOBJID  
+    AND  MEASUREMENT.TSTART <= TO_DATE('{safe_start_date}','DDMMYYYY')
+    AND  MEASUREMENT.TSTOP  >  TO_DATE('{safe_start_date}','DDMMYYYY')
+    AND  MEASUREMENT.LTYPEID IN ( 68 -- Register, nominal for GAS
+                                , 3  -- Register, active  for ELK
+                                , 7  -- Register, active, production for ELK
+                                )
+    AND  MEASUREMENT.LDATATYPEID  = 1 -- Measurement
+    JOIN {schema_name}.G_TIMESERIES_MAIN TIMESERIES
+      ON TIMESERIES.LOBJID = MEASUREMENT.LTSID 
+    JOIN {schema_name}.G_ALL_ITS_VALUES_VIEW  STANDEN
+      ON STANDEN.LOBJID  = TIMESERIES.LOBJID
+    JOIN {schema_name}.G_TSVEL_EVENT SVEL_EVENT
+      ON SVEL_EVENT.LTSID  = TIMESERIES.LOBJID 
+     AND SVEL_EVENT.TVALTIME  = STANDEN.TTIME
+    JOIN {schema_name}.G_MUTATION_REASON_ENUM  MUT_REASON
+      ON MUT_REASON.LID  = SVEL_EVENT.LPROCESSID  
+    WHERE (1=1)
+    -- Alleen deze proces-ids:
+    AND MUT_REASON.SCODE IN ('SWITCHPV','SWITCHLV','MOVEIN', 'MOVEOUT', 'ALLMTCHG', 'MONTHMTR', 'PERMTR', 'EOSUPPLY')
+    -- Alleen als de Originator de eigen RNB is:
+    AND ( 
+        -- Alleen als de Originator de eigen RNB is:
+        SVEL_EVENT.SORIGINATOR = DETAILS_UDT.SGRIDOPERATOR
+        OR
+        -- Of indien het bericht naar de DSO is gestuurd, de Aansluiting DGO onderdeel is van die DSO:
+        DETAILS_UDT.SGRIDOPERATOR IN (
+                                      SELECT PTY_DGO.SCODE  
+                                      FROM   DOM8ADMIN.G_PARTY            PTY_DSO
+                                      JOIN   DOM8ADMIN.G_PARTY_PARTY_LINK PPL
+                                        ON   PPL.LSRCPARTYID  = PTY_DSO.LOBJID 
+                                      JOIN   DOM8ADMIN.G_PARTY            PTY_DGO  
+                                        ON   PTY_DGO.LOBJID   = PPL.LDESTPARTYID 
+                                      WHERE  PTY_DSO.SCODE = SVEL_EVENT.SORIGINATOR -- SVEL-EVENT
+                                     )
+        )
+    AND STANDEN.TMODIFIED > TO_DATE('{safe_start_date}','DDMMYYYY')
+    GROUP BY MUT_REASON.SCODE 
+    ORDER BY 1,2
     """
 
     context_str = f"Fetching accepted readings counts for {domain}"
@@ -232,13 +351,12 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025', read
                 
                 columns = [col[0] for col in cursor.description]
                 cursor.rowfactory = lambda *args: dict(zip(columns, args))
-                results = cursor.fetchone() # We only expect one count row
+                results = cursor.fetchall()
                 
                 # Log success
                 log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
                 
-                # Returns count (results['AANTAL']) and the query for debug
-                return results['AANTAL'] if results else 0, sql
+                return results, sql
     except Exception as db_err:
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err

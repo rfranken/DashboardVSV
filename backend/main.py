@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, is_connected, close_pool, get_active_credentials
+from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, get_parked_readings_counts, is_connected, close_pool, get_active_credentials
 import os
 import traceback
 from pydantic import BaseModel
@@ -51,20 +51,32 @@ def connect_database(request: ConnectionRequest):
     Manual override to initialize the database pool with the provided credentials.
     Optionally accepts dsn and db_user so the user can choose the environment in the UI.
     """
-    result = init_pool(
-        password=request.password,
-        dsn=request.dsn,
-        db_user=request.db_user,
-    )
-    if result is not True:
-        dsn_label = request.dsn or "database"
-        if result == 'auth_error':
-            detail = f"Invalid combination of username and password for '{dsn_label}'."
-        else:
-            detail = f"Connection to '{dsn_label}' cannot be established."
-        raise HTTPException(status_code=401, detail=detail)
+    from logger import log_message
+    import traceback
+    try:
+        result = init_pool(
+            password=request.password,
+            dsn=request.dsn,
+            db_user=request.db_user,
+        )
+        if result is not True:
+            dsn_label = request.dsn or "database"
+            if result == 'auth_error':
+                detail = f"Invalid combination of username and password for '{dsn_label}'."
+            elif result == 'connection_error':
+                detail = f"Connection to '{dsn_label}' cannot be established."
+            else:
+                detail = result  # raw Oracle error string
+            raise HTTPException(status_code=400, detail=detail)
 
-    return {"status": "success", "message": "Database connected successfully"}
+        return {"status": "success", "message": "Database connected successfully"}
+
+    except HTTPException:
+        raise  # re-raise 401/400 without wrapping
+    except Exception as e:
+        tb = traceback.format_exc()
+        log_message(f"UNHANDLED EXCEPTION in /api/connect:\n{tb}", category="ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/disconnect")
 def disconnect_database():
@@ -156,8 +168,11 @@ def read_readings(
 
         results, debug_sql = get_readings_counts(domain, resolved_start_date)
         
-        # New: Get accepted readings count
-        accepted_count, accepted_sql = get_accepted_readings_counts(domain, resolved_start_date, reading_date)
+        # New: Get accepted readings counts
+        accepted_results, accepted_sql = get_accepted_readings_counts(domain, resolved_start_date)
+        
+        # New: Get parked readings count
+        parked_results, parked_debug_sql = get_parked_readings_counts(domain, resolved_start_date)
         
         domain_suffix = domain.replace('DOM', '')
         transformed_data = {}
@@ -168,8 +183,17 @@ def read_readings(
             key = f"{proces_id}_{domain_suffix}"
             transformed_data[key] = count
             
-        # Add the Accepted row data
-        transformed_data[f"ACCEPTED_{domain_suffix}"] = accepted_count
+        for row in parked_results:
+            proces_id = row['PROCESID']
+            count = row['AANTAL']
+            key = f"PARKED_{proces_id}_{domain_suffix}"
+            transformed_data[key] = count
+            
+        for row in accepted_results:
+            proces_id = row['PROCESSID']
+            count = row['AANTAL']
+            key = f"ACCEPTED_{proces_id}_{domain_suffix}"
+            transformed_data[key] = count
             
         payload = { **transformed_data }
         
@@ -177,6 +201,7 @@ def read_readings(
             payload["_debug"] = {
                 "sql": debug_sql,
                 "accepted_sql": accepted_sql,
+                "parked_sql": parked_debug_sql,
                 "context": f"Fetching readings counts for {domain}",
                 "start_date_used": resolved_start_date,
             }
