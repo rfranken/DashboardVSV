@@ -290,6 +290,17 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025'):
     safe_start_date = start_date.split(':')[0][:8]
     
     sql = f"""
+    WITH INLV_STANDEN AS 
+    (
+         SELECT TTIME,
+         LOBJID,
+         DVALUE,
+         LSTATUS,
+         1 LVALUETYPE,
+         TMODIFIED,
+         SMODIFIER
+         FROM   {schema_name}.G_TIMESERIES_DATA_1
+    )
     SELECT  MUT_REASON.SCODE      AS PROCESSID
     ,       COUNT(STANDEN.DVALUE) AS AANTAL
     FROM {schema_name}.G_METERING_POINT          METERING_POINT
@@ -310,7 +321,7 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025'):
     AND  MEASUREMENT.LDATATYPEID  = 1 -- Measurement
     JOIN {schema_name}.G_TIMESERIES_MAIN TIMESERIES
       ON TIMESERIES.LOBJID = MEASUREMENT.LTSID 
-    JOIN {schema_name}.G_ALL_ITS_VALUES_VIEW  STANDEN
+    JOIN INLV_STANDEN  STANDEN
       ON STANDEN.LOBJID  = TIMESERIES.LOBJID
     JOIN {schema_name}.G_TSVEL_EVENT SVEL_EVENT
       ON SVEL_EVENT.LTSID  = TIMESERIES.LOBJID 
@@ -466,10 +477,17 @@ def get_accepted_readings_details(domain: str, process_id: str, start_date: str 
     ,       SVEL_EVENT.SDOSSIERID           AS TRANSACTIEDOSSIER
     ,       MUT_REASON.SCODE                AS PROCESID
     ,       CASE to_char(STANDEN.LSTATUS)
-                   when '126' then 'Berekend'
-                   when '150' then 'Gemeten'
-                   else            '*ONGELDIG:'||STANDEN.LSTATUS
-             END                                AS HERKOMST      
+                   when '100' then 'Estimated'
+                   when '125' then 'Calculated'
+                   when '126' then 'Calculated by DGO'
+                   when '135' then 'Customer Reading'
+                   when '140' then 'Manually accepted'
+                   when '145' then 'Physical reading'
+                   when '150' then 'Measured'
+                   when '151' then 'Recorded by DGO'
+                   when '255' then 'Void'
+                   else            '*ONBEKEND:'||STANDEN.LSTATUS
+             END                                      AS HERKOMST     
     ,       CAST(FROM_TZ(CAST(STANDEN.TMODIFIED AS TIMESTAMP), 'UTC') AT TIME ZONE 'CET' AS DATE)          AS ONTVANGEN_OP
     FROM {schema_name}.G_METERING_POINT          METERING_POINT
     JOIN {schema_name}.G_MP_DETAILS              DETAILS
@@ -500,7 +518,21 @@ def get_accepted_readings_details(domain: str, process_id: str, start_date: str 
     -- Alleen deze proces-id:
     AND MUT_REASON.SCODE = :process_id
     -- Alleen als de Originator de eigen RNB is:
-    AND SVEL_EVENT.SORIGINATOR = DETAILS_UDT.SGRIDOPERATOR
+    AND ( 
+        -- Alleen als de Originator de eigen RNB is:
+        SVEL_EVENT.SORIGINATOR = DETAILS_UDT.SGRIDOPERATOR
+        OR
+        -- Of indien het bericht naar de DSO is gestuurd, de Aansluiting DGO onderdeel is van die DSO:
+        DETAILS_UDT.SGRIDOPERATOR IN (
+                                      SELECT PTY_DGO.SCODE  
+                                      FROM   {schema_name}.G_PARTY            PTY_DSO
+                                      JOIN   {schema_name}.G_PARTY_PARTY_LINK PPL
+                                        ON   PPL.LSRCPARTYID  = PTY_DSO.LOBJID 
+                                      JOIN   {schema_name}.G_PARTY            PTY_DGO  
+                                        ON   PTY_DGO.LOBJID   = PPL.LDESTPARTYID 
+                                      WHERE  PTY_DSO.SCODE = SVEL_EVENT.SORIGINATOR -- SVEL-EVENT
+                                     )
+        )
     AND STANDEN.TMODIFIED > TO_DATE('{safe_start_date}','DDMMYYYY')
     """
     

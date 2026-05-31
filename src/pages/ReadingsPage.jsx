@@ -29,6 +29,7 @@ export default function ReadingsPage({
   const [modalError, setModalError] = useState(null);
   const [searchEan, setSearchEan] = useState('');
   const [searchDossier, setSearchDossier] = useState('');
+  const [searchHerkomst, setSearchHerkomst] = useState('Alles');
   const [modalDebug, setModalDebug] = useState(null);
 
   // ESC key listener to close modal
@@ -51,6 +52,7 @@ export default function ReadingsPage({
     setModalError(null);
     setSearchEan('');
     setSearchDossier('');
+    setSearchHerkomst('Alles');
     setModalDebug(null);
 
     try {
@@ -101,7 +103,15 @@ export default function ReadingsPage({
   const filteredReadings = acceptedDetails.filter((r) => {
     const matchEan = (r.MP_EAN_CODE || '').toLowerCase().includes(searchEan.trim().toLowerCase());
     const matchDossier = (r.TRANSACTIEDOSSIER || '').toLowerCase().includes(searchDossier.trim().toLowerCase());
-    return matchEan && matchDossier;
+    
+    let matchHerkomst = true;
+    if (searchHerkomst === 'Gemeten') {
+      matchHerkomst = r.HERKOMST === 'Measured';
+    } else if (searchHerkomst === 'Anders') {
+      matchHerkomst = r.HERKOMST !== 'Measured';
+    }
+    
+    return matchEan && matchDossier && matchHerkomst;
   });
   
   const formatDateToDdMmYyyy = (dateStr) => {
@@ -289,6 +299,19 @@ export default function ReadingsPage({
                     onChange={(e) => setSearchDossier(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm"
                   />
+                </div>
+                <div className="w-48">
+                  <label htmlFor="search-herkomst" className="block text-xs font-semibold text-gray-500 uppercase mb-1">Herkomst</label>
+                  <select
+                    id="search-herkomst"
+                    value={searchHerkomst}
+                    onChange={(e) => setSearchHerkomst(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-sm cursor-pointer"
+                  >
+                    <option value="Alles">Alles</option>
+                    <option value="Gemeten">Gemeten</option>
+                    <option value="Anders">Anders</option>
+                  </select>
                 </div>
               </div>
             )}
