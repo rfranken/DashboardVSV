@@ -328,10 +328,10 @@ def get_accepted_readings_counts(domain: str, start_date: str = '17012025'):
         -- Of indien het bericht naar de DSO is gestuurd, de Aansluiting DGO onderdeel is van die DSO:
         DETAILS_UDT.SGRIDOPERATOR IN (
                                       SELECT PTY_DGO.SCODE  
-                                      FROM   DOM8ADMIN.G_PARTY            PTY_DSO
-                                      JOIN   DOM8ADMIN.G_PARTY_PARTY_LINK PPL
+                                      FROM   {schema_name}.G_PARTY            PTY_DSO
+                                      JOIN   {schema_name}.G_PARTY_PARTY_LINK PPL
                                         ON   PPL.LSRCPARTYID  = PTY_DSO.LOBJID 
-                                      JOIN   DOM8ADMIN.G_PARTY            PTY_DGO  
+                                      JOIN   {schema_name}.G_PARTY            PTY_DGO  
                                         ON   PTY_DGO.LOBJID   = PPL.LDESTPARTYID 
                                       WHERE  PTY_DSO.SCODE = SVEL_EVENT.SORIGINATOR -- SVEL-EVENT
                                      )
@@ -433,5 +433,95 @@ def get_message_details(domain: str, status_prefix: str, subtype: str = 'SmartRe
     except Exception as db_err:
         log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
         raise db_err
+
+def get_accepted_readings_details(domain: str, process_id: str, start_date: str = '17012025'):
+    """
+    Executes the query to fetch accepted reading details for a specific domain and process ID.
+    """
+    if not _pool:
+        raise Exception("Database pool is not initialized")
+        
+    if not domain.startswith('DOM') or not domain[3:].isdigit():
+        raise ValueError("Invalid domain identifier format.")
+        
+    schema_name = f"{domain}ADMIN"
+    safe_start_date = start_date.split(':')[0][:8]
+    
+    sql = f"""
+    WITH INLV_STANDEN AS 
+    (
+         SELECT TTIME,
+         LOBJID,
+         DVALUE,
+         LSTATUS,
+         1 LVALUETYPE,
+         TMODIFIED,
+         SMODIFIER
+         FROM   {schema_name}.G_TIMESERIES_DATA_1
+    )
+    SELECT  METERING_POINT.SCODE            AS MP_EAN_CODE
+    ,       MEASUREMENT.SCODE               AS TELWERK
+    ,       STANDEN.DVALUE                  AS STAND
+    ,       CAST(FROM_TZ(CAST(STANDEN.TTIME AS TIMESTAMP), 'UTC') AT TIME ZONE 'CET' AS DATE)  AS OPNAMEDATUM
+    ,       SVEL_EVENT.SDOSSIERID           AS TRANSACTIEDOSSIER
+    ,       MUT_REASON.SCODE                AS PROCESID
+    ,       CASE to_char(STANDEN.LSTATUS)
+                   when '126' then 'Berekend'
+                   when '150' then 'Gemeten'
+                   else            '*ONGELDIG:'||STANDEN.LSTATUS
+             END                                AS HERKOMST      
+    ,       CAST(FROM_TZ(CAST(STANDEN.TMODIFIED AS TIMESTAMP), 'UTC') AT TIME ZONE 'CET' AS DATE)          AS ONTVANGEN_OP
+    FROM {schema_name}.G_METERING_POINT          METERING_POINT
+    JOIN {schema_name}.G_MP_DETAILS              DETAILS
+      ON DETAILS.LMPID = METERING_POINT.LOBJID
+     AND DETAILS.TSTART < TO_DATE('{safe_start_date}','DDMMYYYY')
+     AND DETAILS.TSTOP  > TO_DATE('{safe_start_date}','DDMMYYYY')
+    JOIN {schema_name}.G_MP_DETAILS_UDT          DETAILS_UDT
+      ON DETAILS_UDT.LOBJID = DETAILS.LID
+    JOIN {schema_name}.G_MEASUREMENT             MEASUREMENT
+     ON  MEASUREMENT.LMETERINGPOINTID  = METERING_POINT.LOBJID  
+    AND  MEASUREMENT.TSTART <= TO_DATE('{safe_start_date}','DDMMYYYY')
+    AND  MEASUREMENT.TSTOP  >  TO_DATE('{safe_start_date}','DDMMYYYY')
+    AND  MEASUREMENT.LTYPEID IN ( 68 -- Register, nominal for GAS
+                                , 3  -- Register, active  for ELK
+                                , 7  -- Register, active, production for ELK
+                                )
+    AND  MEASUREMENT.LDATATYPEID  = 1 -- Measurement
+    JOIN {schema_name}.G_TIMESERIES_MAIN TIMESERIES
+      ON TIMESERIES.LOBJID = MEASUREMENT.LTSID 
+    JOIN INLV_STANDEN  STANDEN
+      ON STANDEN.LOBJID  = TIMESERIES.LOBJID
+    JOIN {schema_name}.G_TSVEL_EVENT SVEL_EVENT
+      ON SVEL_EVENT.LTSID  = TIMESERIES.LOBJID 
+     AND SVEL_EVENT.TVALTIME  = STANDEN.TTIME
+    JOIN {schema_name}.G_MUTATION_REASON_ENUM  MUT_REASON
+      ON MUT_REASON.LID  = SVEL_EVENT.LPROCESSID  
+    WHERE (1=1)
+    -- Alleen deze proces-id:
+    AND MUT_REASON.SCODE = :process_id
+    -- Alleen als de Originator de eigen RNB is:
+    AND SVEL_EVENT.SORIGINATOR = DETAILS_UDT.SGRIDOPERATOR
+    AND STANDEN.TMODIFIED > TO_DATE('{safe_start_date}','DDMMYYYY')
+    """
+    
+    context_str = f"Fetching accepted readings details for {domain} and process {process_id}"
+    bind_params = {'process_id': process_id}
+    
+    try:
+        with _pool.acquire() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, bind_params)
+                
+                columns = [col[0] for col in cursor.description]
+                cursor.rowfactory = lambda *args: dict(zip(columns, args))
+                results = cursor.fetchall()
+                
+                log_sql(context=context_str, sql=sql, params=bind_params, result="OK")
+                
+                return results, sql
+    except Exception as db_err:
+        log_sql(context=context_str, sql=sql, params=bind_params, result="ERROR", error_desc=str(db_err))
+        raise db_err
+
 
 

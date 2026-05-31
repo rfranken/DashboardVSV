@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, get_parked_readings_counts, get_message_details, is_connected, close_pool, get_active_credentials
+from database import init_pool, get_status_counts, get_readings_counts, get_accepted_readings_counts, get_parked_readings_counts, get_message_details, is_connected, close_pool, get_active_credentials, get_accepted_readings_details
 import os
 import traceback
 from pydantic import BaseModel
@@ -249,4 +249,39 @@ def read_message_details(
     except Exception as e:
         tb = traceback.format_exc()
         log_message(f"UNHANDLED EXCEPTION in /api/message-details (domain={domain}, status={status_prefix}):\n{tb}", category="ERROR")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/accepted-readings-details")
+def read_accepted_readings_details(
+    domain: str,
+    process_id: str,
+    start_date: str = '',
+):
+    """
+    Returns individual accepted readings details for a specified domain and process ID.
+    """
+    from logger import log_message
+    try:
+        resolved_start_date = start_date or os.environ.get("DEFAULT_START_DATE", "17012025")
+
+        results, debug_sql = get_accepted_readings_details(domain, process_id, resolved_start_date)
+        
+        payload = {
+            "readings": results
+        }
+        
+        if os.environ.get("DEBUG_MODE", "OFF") == "ON":
+            payload["_debug"] = {
+                "sql": debug_sql,
+                "context": f"Fetching accepted readings details for {domain} process {process_id}",
+                "start_date_used": resolved_start_date,
+            }
+            
+        return payload
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        tb = traceback.format_exc()
+        log_message(f"UNHANDLED EXCEPTION in /api/accepted-readings-details (domain={domain}, process_id={process_id}):\n{tb}", category="ERROR")
         raise HTTPException(status_code=500, detail=str(e))

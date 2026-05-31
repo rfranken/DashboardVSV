@@ -12,7 +12,7 @@ const PROCESS_ROWS = [
   { label: 'MONTHMTR', id: 'MONTHMTR' },
 ];
 
-export default function AcceptedReadingsTable({ data = {}, currentDomain, domains }) {
+export default function AcceptedReadingsTable({ data = {}, currentDomain, domains, onCellClick }) {
   // Helper to determine text color
   const getCellColorClass = (value) => {
     if (value === undefined || value === null) return 'text-black font-semibold opacity-30';
@@ -59,9 +59,18 @@ export default function AcceptedReadingsTable({ data = {}, currentDomain, domain
 
                 return (
                   <td key={cellKey} className="whitespace-nowrap px-1.5 py-1.5 text-center text-sm tabular-nums border-r border-gray-100 last:border-r-0 relative">
-                    <span className={getCellColorClass(value)}>
-                      {value !== undefined ? value : '-'}
-                    </span>
+                    {value !== undefined && value > 0 && onCellClick ? (
+                      <button
+                        onClick={() => onCellClick(domain, row.id, value)}
+                        className={`${getCellColorClass(value)} hover:underline cursor-pointer focus:outline-none`}
+                      >
+                        {value}
+                      </button>
+                    ) : (
+                      <span className={getCellColorClass(value)}>
+                        {value !== undefined ? value : '-'}
+                      </span>
+                    )}
                   </td>
                 );
               })}
